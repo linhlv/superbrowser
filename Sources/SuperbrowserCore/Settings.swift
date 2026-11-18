@@ -53,3 +53,17 @@ public func visibleProfiles(_ all: [ChromeProfile], settings: Settings) -> [Chro
 public func profile(forSlot slot: Int, in visible: [ChromeProfile]) -> ChromeProfile? {
     visible.indices.contains(slot - 1) ? visible[slot - 1] : nil
 }
+
+/// Every profile dir (hidden ones included) in the current order, with `dir` swapped with its nearest
+/// visible neighbour above (`up`) or below. Hidden profiles keep their places. Unchanged order when
+/// `dir` is hidden, unknown or already at that edge.
+public func movedProfileOrder(_ all: [ChromeProfile], settings: Settings, dir: String, up: Bool) -> [String] {
+    var unhidden = settings
+    unhidden.hiddenProfiles = []
+    var order = visibleProfiles(all, settings: unhidden).map(\.dir)
+    guard !settings.hiddenProfiles.contains(dir), let i = order.firstIndex(of: dir) else { return order }
+    let candidates = up ? Array(order.indices[..<i].reversed()) : Array(order.indices[(i + 1)...])
+    guard let j = candidates.first(where: { !settings.hiddenProfiles.contains(order[$0]) }) else { return order }
+    order.swapAt(i, j)
+    return order
+}

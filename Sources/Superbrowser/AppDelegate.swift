@@ -61,7 +61,19 @@ import SuperbrowserCore
         })
         observers.append(center.addObserver(forName: NSApplication.didChangeScreenParametersNotification,
                                             object: nil, queue: .main) { [weak self] _ in
-            MainActor.assumeIsolated { self?.coordinator.screensChanged(Self.axScreens()) }
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.coordinator.screensChanged(Self.axScreens())
+                // The AX bar rect may be unchanged while its Cocoa position (primary height) moved.
+                self.bar.apply(self.coordinator.barModel, force: true)
+            }
+        })
+        observers.append(NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.activeSpaceDidChangeNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, self.chrome.isChromeActive else { return }
+                self.bar.setChromeActive(true)   // re-homes the bar onto Chrome's desktop if needed
+            }
         })
 
         if !coordinator.settings.setupDone { checklist.show() }

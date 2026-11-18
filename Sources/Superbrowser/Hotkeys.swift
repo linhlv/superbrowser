@@ -42,9 +42,11 @@ private func hotKeyPressed(_ call: EventHandlerCallRef?, _ event: EventRef?, _ u
         if let handler { RemoveEventHandler(handler) }
     }
 
-    /// Replaces the current set of hot keys. Returns the slots (1…9) the system refused.
+    /// Replaces the current set of hot keys. Returns the slots (1…9) the system refused —
+    /// all of them if the event handler couldn't be installed (presses would never arrive).
     func register(modifier: HotkeyModifier) -> [Int] {
         unregisterAll()
+        guard handler != nil else { return Array(1...Self.keyCodes.count) }
         let mods: UInt32 = switch modifier {
         case .control: UInt32(controlKey)
         case .controlOption: UInt32(controlKey | optionKey)

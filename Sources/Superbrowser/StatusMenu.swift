@@ -108,13 +108,13 @@ import SuperbrowserCore
         for p in visible + hidden {
             let item = NSMenuItem(title: p.name, action: nil, keyEquivalent: "")
             item.image = Self.colorDot(p.color)
-            item.submenu = profileMenu(p, visibleOrder: visible.map(\.dir), hiddenOrder: hidden.map(\.dir))
+            item.submenu = profileMenu(p, visibleOrder: visible.map(\.dir))
             m.addItem(item)
         }
         return m
     }
 
-    private func profileMenu(_ p: ChromeProfile, visibleOrder: [String], hiddenOrder: [String]) -> NSMenu {
+    private func profileMenu(_ p: ChromeProfile, visibleOrder: [String]) -> NSMenu {
         let m = NSMenu()
         m.autoenablesItems = false
         let settings = coordinator.settings
@@ -126,9 +126,9 @@ import SuperbrowserCore
             }
         })
         let index = visibleOrder.firstIndex(of: dir)
-        let up = ActionItem("Move Up") { [weak self] in self?.move(dir, by: -1, visibleOrder: visibleOrder, hiddenOrder: hiddenOrder) }
+        let up = ActionItem("Move Up") { [weak self] in self?.move(dir, up: true) }
         up.isEnabled = (index ?? 0) > 0
-        let down = ActionItem("Move Down") { [weak self] in self?.move(dir, by: 1, visibleOrder: visibleOrder, hiddenOrder: hiddenOrder) }
+        let down = ActionItem("Move Down") { [weak self] in self?.move(dir, up: false) }
         down.isEnabled = index.map { $0 < visibleOrder.count - 1 } ?? false
         m.addItem(up)
         m.addItem(down)
@@ -145,12 +145,10 @@ import SuperbrowserCore
         return m
     }
 
-    /// Materializes the visible bar order, swaps `dir` with its neighbour, keeps hidden profiles after it.
-    private func move(_ dir: String, by delta: Int, visibleOrder: [String], hiddenOrder: [String]) {
-        var order = visibleOrder
-        guard let i = order.firstIndex(of: dir), order.indices.contains(i + delta) else { return }
-        order.swapAt(i, i + delta)
-        coordinator.updateSettings { $0.profileOrder = order + hiddenOrder }
+    /// Swaps `dir` with its visible neighbour in the full stored order; hidden profiles keep their places.
+    private func move(_ dir: String, up: Bool) {
+        let order = movedProfileOrder(allProfiles(), settings: coordinator.settings, dir: dir, up: up)
+        coordinator.updateSettings { $0.profileOrder = order }
     }
 
     private func shortcutMenu(warnings: [String]) -> NSMenu {

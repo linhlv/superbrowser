@@ -114,19 +114,51 @@ import SuperbrowserCore
         panel.contentView = bg
     }
 
+    /// Call when Chrome activates/deactivates and whenever the active Space changes (activation can
+    /// arrive before the switch to Chrome's desktop finishes).
     func setChromeActive(_ active: Bool) {
         chromeActive = active
         panel.level = active ? .floating : .normal
+        if active, model != nil { showOnActiveSpace() }
     }
 
-    func apply(_ model: BarModel) {
-        guard model != self.model else { return }
+    /// `force` re-lays out an unchanged model (e.g. the primary screen's height changed).
+    func apply(_ model: BarModel, force: Bool = false) {
+        guard force || model != self.model else { return }
         self.model = model
         let primaryHeight = NSScreen.screens.first?.frame.height ?? model.barRect.maxY
         rebuild(model)
         panel.setFrame(FrameLayout.cocoaRect(fromAX: model.barRect, primaryScreenHeight: primaryHeight), display: false)
-        // Reorder only on first show or while Chrome is active; otherwise a covering app also covers the bar.
-        if !panel.isVisible || chromeActive { panel.orderFrontRegardless() }
+        // Reorder only while Chrome is active; otherwise a covering app also covers the bar.
+        if chromeActive { showOnActiveSpace() }
+    }
+
+    /// Shows the bar (never before Chrome is first active) on the active Space — Chrome's desktop.
+    /// A panel belongs to the Space it was first shown on; ordering it out and in again re-homes it.
+    /// It is (re)homed only onto a Space where Chrome has a window, so a Space switch that leaves
+    /// Chrome frontmost on an empty desktop (or an activation that arrives before the switch to
+    /// Chrome's desktop finishes) doesn't drag the bar along.
+    private func showOnActiveSpace() {
+        if panel.isVisible && panel.isOnActiveSpace {
+            panel.orderFrontRegardless()
+            return
+        }
+        guard Self.chromeHasWindowOnActiveSpace() else { return }
+        if panel.isVisible { panel.orderOut(nil) }
+        panel.orderFrontRegardless()
+    }
+
+    /// On-screen windows are those on the active Space (owner pid and layer need no Screen Recording access).
+    private static func chromeHasWindowOnActiveSpace() -> Bool {
+        let pids = Set(NSRunningApplication.runningApplications(withBundleIdentifier: ChromeAX.bundleID)
+            .map(\.processIdentifier))
+        guard !pids.isEmpty,
+              let info = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID)
+                as? [[String: Any]] else { return false }
+        return info.contains { w in
+            (w[kCGWindowLayer as String] as? Int) == 0
+                && (w[kCGWindowOwnerPID as String] as? Int).map { pids.contains(pid_t($0)) } == true
+        }
     }
 
     private func rebuild(_ model: BarModel) {
