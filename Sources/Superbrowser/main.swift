@@ -73,4 +73,30 @@ FileHandle.standardInput.readabilityHandler = { handle in
     }
 }
 
+// Temporary demo (Task 10): `--demo-bar` cycles a hard-coded 3-tab bar through the four positions.
+@MainActor final class BarDemo {
+    let panel = BarPanel(onSelect: { print("bar: selected", $0) })
+    var i = 0
+    let tabs = [
+        BarTab(profileDir: "Default", name: "Linh", color: RGB(r: 66, g: 133, b: 244), slot: 1, isActive: true, windowCount: 1, isLinked: true),
+        BarTab(profileDir: "Profile 1", name: "Nguyễn Thị Hương - công việc rất dài", color: RGB(r: 219, g: 68, b: 55), slot: 2, isActive: false, windowCount: 2, isLinked: false),
+        BarTab(profileDir: "Profile 2", name: "Trường", color: RGB(r: 15, g: 157, b: 88), slot: 3, isActive: false, windowCount: 0, isLinked: true),
+    ]
+    func show() {
+        let pos = [BarPosition.top, .right, .bottom, .left][i % 4]; i += 1
+        let bar = FrameLayout.split(frame: CGRect(x: 200, y: 150, width: 900, height: 600), position: pos).bar
+        print("bar: position \(pos) rect \(describe(bar))")
+        panel.apply(BarModel(position: pos, barRect: bar, tabs: tabs, modifier: .controlOption))
+        panel.setChromeActive(true)
+    }
+}
+if CommandLine.arguments.contains("--demo-bar") {
+    MainActor.assumeIsolated {
+        let demo = BarDemo()
+        demo.show()
+        let t = Timer(timeInterval: 2, repeats: true) { _ in MainActor.assumeIsolated { demo.show() } }
+        RunLoop.main.add(t, forMode: .common)
+    }
+}
+
 RunLoop.main.run()
