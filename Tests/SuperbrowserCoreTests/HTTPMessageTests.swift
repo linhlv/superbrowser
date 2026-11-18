@@ -11,6 +11,14 @@ import Foundation
         #expect(r?.body == Data("hello".utf8))
     }
 
+    @Test func httpParsesHeadersLowercased() {
+        let raw = "POST /report HTTP/1.1\r\nContent-Type: application/json\r\nOrigin:  chrome-extension://abc \r\nContent-Length: 0\r\n\r\n"
+        let r = parseHTTPRequest(Data(raw.utf8))
+        #expect(r?.headers["content-type"] == "application/json")
+        #expect(r?.headers["origin"] == "chrome-extension://abc")
+        #expect(r?.headers["Origin"] == nil)
+    }
+
     @Test func httpIncompleteBodyIsNil() {
         #expect(parseHTTPRequest(Data("POST /r HTTP/1.1\r\nContent-Length: 5\r\n\r\nhe".utf8)) == nil)
         #expect(parseHTTPRequest(Data("POST /r HTTP/1.1\r\nContent-Le".utf8)) == nil)

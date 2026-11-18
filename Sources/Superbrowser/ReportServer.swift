@@ -14,6 +14,13 @@ final class ReportServer {
     private let queue = DispatchQueue(label: "superbrowser.report-server")
     private var listener: NWListener?
 
+    enum State: Equatable { case ready, failed(String) }
+    struct StartError: Error, CustomStringConvertible {
+        let description: String
+    }
+    /// Called on the main actor when the listener becomes ready or fails (e.g. port in use).
+    var onStateChange: (@MainActor (State) -> Void)?
+
     init(port: UInt16 = 47321,
          onReport: @MainActor @escaping (ExtensionReport) -> Void,
          profileName: @MainActor @escaping (String) -> String?) {
@@ -23,7 +30,8 @@ final class ReportServer {
     }
 
     func start() throws {
-        guard listener == nil, let nwPort = NWEndpoint.Port(rawValue: port) else { return }
+        guard listener == nil else { return }
+        guard let nwPort = NWEndpoint.Port(rawValue: port) else { throw StartError(description: "invalid port \(port)") }
         let params = NWParameters.tcp
         params.requiredLocalEndpoint = .hostPort(host: "127.0.0.1", port: nwPort)
         params.acceptLocalOnly = true
@@ -35,6 +43,19 @@ final class ReportServer {
         let queue = self.queue
         listener.newConnectionHandler = { connection in
             ConnectionHandler(connection: connection, queue: queue, handler: handler).start()
+        }
+        listener.stateUpdateHandler = { [weak self] state in
+            let mapped: State
+            switch state {
+            case .ready: mapped = .ready
+            case .failed(let error): mapped = .failed("\(error)")
+            default: return
+            }
+            Task { @MainActor in
+                guard let self else { return }
+                if case .failed = mapped { self.listener?.cancel(); self.listener = nil }
+                self.onStateChange?(mapped)
+            }
         }
         listener.start(queue: queue)
         self.listener = listener
@@ -52,6 +73,12 @@ final class ReportServer {
     private func handle(_ request: HTTPRequest) -> Data {
         switch (request.method, request.path) {
         case ("POST", "/report"):
+            guard request.headers["content-type"]?.lowercased().hasPrefix("application/json") == true else {
+                return Self.reply(415, "text/plain", "unsupported media type")
+            }
+            if let origin = request.headers["origin"], !origin.hasPrefix("chrome-extension://") {
+                return Self.reply(403, "text/plain", "forbidden")
+            }
             guard let report = try? JSONDecoder().decode(ExtensionReport.self, from: request.body) else {
                 return Self.reply(400, "text/plain", "bad report")
             }

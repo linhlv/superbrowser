@@ -5,8 +5,10 @@ public struct HTTPRequest: Equatable, Sendable {
     public var path: String
     public var query: [String: String]
     public var body: Data
-    public init(method: String, path: String, query: [String: String], body: Data) {
-        self.method = method; self.path = path; self.query = query; self.body = body
+    /// Header names are lower-cased.
+    public var headers: [String: String]
+    public init(method: String, path: String, query: [String: String], body: Data, headers: [String: String] = [:]) {
+        self.method = method; self.path = path; self.query = query; self.body = body; self.headers = headers
     }
 }
 
@@ -20,10 +22,14 @@ public func parseHTTPRequest(_ data: Data) -> HTTPRequest? {
     guard requestLine.count >= 2 else { return nil }
 
     var contentLength = 0
+    var headers: [String: String] = [:]
     for line in lines {
         guard let colon = line.firstIndex(of: ":") else { continue }
-        if line[..<colon].trimmingCharacters(in: .whitespaces).lowercased() == "content-length" {
-            guard let n = Int(line[line.index(after: colon)...].trimmingCharacters(in: .whitespaces)), n >= 0 else { return nil }
+        let name = line[..<colon].trimmingCharacters(in: .whitespaces).lowercased()
+        let value = line[line.index(after: colon)...].trimmingCharacters(in: .whitespaces)
+        headers[name] = value
+        if name == "content-length" {
+            guard let n = Int(value), n >= 0 else { return nil }
             contentLength = n
         }
     }
@@ -45,7 +51,7 @@ public func parseHTTPRequest(_ data: Data) -> HTTPRequest? {
             query[decode(kv[0])] = kv.count > 1 ? decode(kv[1]) : ""
         }
     }
-    return HTTPRequest(method: String(requestLine[0]), path: path, query: query, body: body)
+    return HTTPRequest(method: String(requestLine[0]), path: path, query: query, body: body, headers: headers)
 }
 
 public func httpResponse(status: Int, contentType: String, body: Data) -> Data {
