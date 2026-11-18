@@ -44,6 +44,7 @@ import SuperbrowserCore
         chrome.onWindowsChanged = { [weak coordinator] in coordinator?.windowsChanged() }
         chrome.onWindowMoved = { [weak coordinator] id, rect in coordinator?.windowMoved(id, to: rect) }
         chrome.onFrontWindowChanged = { [weak coordinator] id in coordinator?.frontWindowChanged(id) }
+        chrome.onWindowRestored = { [weak coordinator] id in coordinator?.windowRestored(id) }
         chrome.onChromeTerminated = { [weak coordinator] in coordinator?.chromeTerminated() }
         chrome.onChromeActiveChanged = { [weak self] active in
             guard let self else { return }

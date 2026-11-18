@@ -269,6 +269,41 @@ struct CoordinatorTests {
         #expect(h.ws.raised == [1])
     }
 
+    @Test func restoredWindowIsSnapped() {
+        let h = Harness { $0.add(1, A); $0.add(2, B); $0.add(3, A.offsetBy(dx: 50, dy: 50)) }
+        h.coordinator.receive(report("P1", [(10, A)]))
+        h.coordinator.receive(report("P2", [(20, B)]))
+        h.ws.add(1, C, minimized: true)
+        h.coordinator.receive(report("P1", [(10, C)], state: "minimized"))
+        h.ws.setFrameCalls = []
+
+        // The user drags the frame elsewhere while window 1 is minimized.
+        let moved = CGRect(x: 200, y: 100, width: 1000, height: 700)
+        h.ws.windows[2]?.frame = moved
+        h.coordinator.windowMoved(2, to: moved)
+        #expect(!h.ws.setFrameCalls.contains { $0.id == 1 })
+
+        // Window 1 comes back where it was (the extension hasn't reported the restore yet).
+        h.ws.add(1, C)
+        h.coordinator.windowRestored(1)
+        #expect(h.ws.didSet(1, moved))
+
+        // An unmanaged window is left alone.
+        h.coordinator.windowRestored(3)
+        #expect(!h.ws.setFrameCalls.contains { $0.id == 3 })
+    }
+
+    @Test func activateSnapsOutOfFrameWindow() {
+        let h = Harness { $0.add(1, A) }
+        h.coordinator.receive(report("P1", [(10, A)]))
+        #expect(h.ws.didSet(1, C))
+        h.ws.windows[1]?.frame = A                       // left the frame without a move we heard about
+        h.ws.setFrameCalls = []
+        h.coordinator.activate(profileDir: "P1")
+        #expect(h.ws.didSet(1, C))
+        #expect(h.ws.raised == [1])
+    }
+
     @Test func chromeQuitClearsWindows() {
         let h = Harness { $0.add(1, A); $0.add(2, B) }
         h.coordinator.receive(report("P1", [(10, A)]))

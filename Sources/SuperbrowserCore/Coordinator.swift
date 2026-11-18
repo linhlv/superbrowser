@@ -152,6 +152,14 @@ public struct BarModel: Equatable, Sendable {
         refreshBar()
     }
 
+    /// A window came back from the Dock or full screen. A managed one returns where it was, which may be
+    /// outside the frame if the frame moved meanwhile: snap it. AX is the truth here; the extension may
+    /// still report the window as minimized or full screen.
+    public func windowRestored(_ id: WindowID) {
+        guard isManaged(id), let w = currentWindows()[id], !w.isMinimized, !w.isFullScreen else { return }
+        place(w, content)
+    }
+
     public func frontWindowChanged(_ id: WindowID?) {
         front = id
         if let id {
@@ -176,7 +184,9 @@ public struct BarModel: Equatable, Sendable {
         guard managedDirs.contains(profileDir) else { return }
         switch switchAction(profileDir: profileDir, windows: windowsByRecency(of: profileDir),
                              front: chromeActive ? front : nil) {
-        case .raise(let id): windows.raise(id)
+        case .raise(let id):
+            snap(id, currentWindows())   // it may have left the frame unnoticed
+            windows.raise(id)
         case .openNewWindow(let dir): launcher.openWindow(profileDir: dir)
         case .none: return
         }
@@ -386,9 +396,13 @@ public struct BarModel: Equatable, Sendable {
     /// Never touches minimized or full-screen windows; skips windows already in place.
     private func move(_ id: WindowID, to rect: CGRect, _ ax: [WindowID: AXWindowInfo]) {
         guard let w = ax[id], isSnappable(w) else { return }
+        place(w, rect)
+    }
+
+    private func place(_ w: AXWindowInfo, _ rect: CGRect) {
         if w.frame.isWithin(Self.inPlaceTolerance, of: rect) { return }
-        ownMoves[id] = rect
-        windows.setFrame(id, rect)
+        ownMoves[w.id] = rect
+        windows.setFrame(w.id, rect)
     }
 
     // MARK: - Switching

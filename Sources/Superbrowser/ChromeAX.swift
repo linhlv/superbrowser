@@ -15,6 +15,8 @@ final class ChromeAX: WindowSystem {
     /// A user move/resize (debounced), or the actual frame when Chrome didn't honour a `setFrame`.
     var onWindowMoved: ((WindowID, CGRect) -> Void)?
     var onFrontWindowChanged: ((WindowID?) -> Void)?
+    /// A window came back from the Dock or left full screen (debounced like moves, and reported instead of the move).
+    var onWindowRestored: ((WindowID) -> Void)?
     var onChromeActiveChanged: ((Bool) -> Void)?
     /// The attached Chrome quit (fired before the matching `onWindowsChanged`).
     var onChromeTerminated: (() -> Void)?
@@ -30,7 +32,7 @@ final class ChromeAX: WindowSystem {
     private static let appNotifications = [kAXWindowCreatedNotification, kAXFocusedWindowChangedNotification,
                                            kAXMainWindowChangedNotification]
     private static let windowNotifications = [kAXMovedNotification, kAXResizedNotification,
-                                              kAXUIElementDestroyedNotification]
+                                              kAXUIElementDestroyedNotification, kAXWindowDeminiaturizedNotification]
     private static let ownMoveTolerance: CGFloat = 2
 
     private struct Entry {
@@ -52,6 +54,10 @@ final class ChromeAX: WindowSystem {
     private var moveTasks: [WindowID: Task<Void, Never>] = [:]
     /// Windows inside a `setFrame` call or its settle period, with the requested rect and the settle task.
     private var settling: [WindowID: (rect: CGRect, task: Task<Void, Never>?)] = [:]
+    /// Windows un-minimized since their last debounced move check.
+    private var restoring: Set<WindowID> = []
+    /// Windows seen in full screen since their last debounced move check.
+    private var fullScreenSeen: Set<WindowID> = []
     private var changeTask: Task<Void, Never>?
     private var trustTask: Task<Void, Never>?
     private var observeTask: Task<Void, Never>?
@@ -172,6 +178,8 @@ final class ChromeAX: WindowSystem {
         for entry in settling.values { entry.task?.cancel() }
         moveTasks = [:]
         settling = [:]
+        restoring = []
+        fullScreenSeen = []
         registry = [:]
         observer = nil
         appElement = nil
@@ -307,6 +315,8 @@ final class ChromeAX: WindowSystem {
         guard let entry = registry.removeValue(forKey: id) else { return }
         moveTasks.removeValue(forKey: id)?.cancel()
         settling.removeValue(forKey: id)?.task?.cancel()
+        restoring.remove(id)
+        fullScreenSeen.remove(id)
         if let observer {
             for name in Self.windowNotifications {
                 AXObserverRemoveNotification(observer, entry.element, name as CFString)
@@ -339,6 +349,7 @@ final class ChromeAX: WindowSystem {
         if let v = read("AXFullScreen") as? Bool { entry.info.isFullScreen = v }
         if let v = read(kAXSubroleAttribute) as? String { entry.isStandard = v == kAXStandardWindowSubrole }
         if invalid { return .invalid }
+        if entry.info.isFullScreen { fullScreenSeen.insert(id) }
         registry[id] = entry
         return .ok
     }
@@ -368,17 +379,34 @@ final class ChromeAX: WindowSystem {
             let id = known ?? register(element)
             if known == nil, id != nil { scheduleWindowsChanged() }
             onFrontWindowChanged?(id)
+        case kAXWindowDeminiaturizedNotification:
+            guard let id = lookup(element) else { return }
+            restoring.insert(id)
+            scheduleMoveCheck(id)
         case kAXMovedNotification, kAXResizedNotification:
             guard let id = lookup(element), settling[id] == nil else { return }
-            moveTasks[id]?.cancel()
-            moveTasks[id] = Task { [weak self] in
-                try? await Task.sleep(for: Self.moveDebounce)
-                guard !Task.isCancelled, let self else { return }
-                self.moveTasks[id] = nil
-                if let frame = self.currentFrame(id) { self.onWindowMoved?(id, frame) }
-            }
+            scheduleMoveCheck(id)
         default:
             break
+        }
+    }
+
+    /// After the window settles: a restore (from the Dock or full screen) if one happened, else a user move.
+    /// Restoring moves the window back where it was; that must not drag the frame along.
+    private func scheduleMoveCheck(_ id: WindowID) {
+        moveTasks[id]?.cancel()
+        moveTasks[id] = Task { [weak self] in
+            try? await Task.sleep(for: Self.moveDebounce)
+            guard !Task.isCancelled, let self else { return }
+            self.moveTasks[id] = nil
+            guard let frame = self.currentFrame(id), let info = self.registry[id]?.info else { return }
+            let unminimized = self.restoring.remove(id) != nil
+            let leftFullScreen = !info.isFullScreen && self.fullScreenSeen.remove(id) != nil
+            if unminimized || leftFullScreen {
+                self.onWindowRestored?(id)
+            } else {
+                self.onWindowMoved?(id, frame)
+            }
         }
     }
 
