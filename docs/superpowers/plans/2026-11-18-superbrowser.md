@@ -414,3 +414,14 @@ The brain: owns state and turns events into window moves, raises, launches and b
   11. Quit Chrome → tabs dim; reopen → windows re-adopted.
   12. Hide a profile → tab disappears, its windows are left alone; shortcuts renumber.
 - [ ] **Step 3:** Commit: `chore: app bundle script and README`
+
+## Deviations during execution
+
+- **Chrome quit signal:** `Coordinator.chromeTerminated()` (fired by `ChromeAX` when the attached Chrome process exits) replaces "an empty window list means Chrome quit" — an empty AX list also happens when Chrome's windows are on another Space, so it no longer clears reports.
+- **Fingerprinting:** heights step by 4 pt (not 1 pt) so a fingerprinted window matches only its own report within the 1 pt tolerance, and windows are fingerprinted in place (own origin and width, only the height changes) instead of being moved into the content rect. Heights still waiting for a report at the same origin/width are not reused.
+- **`BarModel.modifier`:** the bar model carries the hotkey modifier so tab hints show the right keys and the app re-registers hotkeys when it changes.
+- **Local server gate and claim nonce:** `POST /report` and `POST /claim/confirm` require `Content-Type: application/json` and, when an `Origin` header is present, a `chrome-extension://` origin. Linking uses a one-time nonce (`ClaimRegistry`, 5 min lifetime): the app opens `/claim?nonce=<n>`, the extension trades it via `POST /claim/confirm` for `{"profileDir": …}` and never takes a profile dir from the URL.
+- **Fallback adoption rules:** the no-extension fallback profile adopts an unmatched standard window (≥ 700×500) only if it is not DevTools, every other visible profile has reported at least once (linked profiles are persisted in `Settings.linkedProfiles`), and the window first appeared within 10 s after Superbrowser opened or raised a window of the fallback profile.
+- **Bar re-homing:** the bar panel is re-shown on Chrome's desktop when Chrome becomes active or the active Space changes, so it doesn't stay on the desktop it was first shown on.
+- **`movedProfileOrder`:** Move Up/Down reorders against the nearest visible neighbour while hidden profiles keep their places (a Core helper instead of reordering the visible list only).
+- **Also added in the final fix wave:** switching ignores Chrome's front window while Chrome isn't active; user moves are clamped to the screens (one leader correction per move); windows restored from the Dock or full screen are re-snapped; without Accessibility trust, tabs/hotkeys show the checklist; an empty profile list is ignored while profiles were known; `Settings` decodes missing fields with defaults.
