@@ -23,7 +23,8 @@ public func parseHTTPRequest(_ data: Data) -> HTTPRequest? {
     for line in lines {
         guard let colon = line.firstIndex(of: ":") else { continue }
         if line[..<colon].trimmingCharacters(in: .whitespaces).lowercased() == "content-length" {
-            contentLength = Int(line[line.index(after: colon)...].trimmingCharacters(in: .whitespaces)) ?? 0
+            guard let n = Int(line[line.index(after: colon)...].trimmingCharacters(in: .whitespaces)), n >= 0 else { return nil }
+            contentLength = n
         }
     }
     let bodyStart = range.upperBound

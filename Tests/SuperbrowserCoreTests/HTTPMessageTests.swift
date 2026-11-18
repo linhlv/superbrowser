@@ -29,4 +29,12 @@ import Foundation
         #expect(s.contains("Content-Length: 2\r\n"))
         #expect(s.hasSuffix("\r\n\r\nok"))
     }
+
+    @Test func httpNegativeContentLengthIsNil() {
+        #expect(parseHTTPRequest(Data("POST /r HTTP/1.1\r\nContent-Length: -1\r\n\r\nhello".utf8)) == nil)
+    }
+
+    @Test func httpNonNumericContentLengthIsNil() {
+        #expect(parseHTTPRequest(Data("POST /r HTTP/1.1\r\nContent-Length: abc\r\n\r\nhello".utf8)) == nil)
+    }
 }
