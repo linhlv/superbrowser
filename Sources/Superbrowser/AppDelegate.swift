@@ -1,4 +1,5 @@
 import AppKit
+import ApplicationServices
 import SuperbrowserCore
 
 /// Builds every piece and wires their events together.
@@ -25,7 +26,7 @@ import SuperbrowserCore
         self.coordinator = coordinator
         log("Superbrowser \(superbrowserVersion) starting; \(profiles.count) Chrome profile(s)")
 
-        bar = BarPanel(onSelect: { [weak coordinator] dir in coordinator?.activate(profileDir: dir) })
+        bar = BarPanel(onSelect: { [weak self] dir in self?.whenTrusted { $0.coordinator.activate(profileDir: dir) } })
         coordinator.onBarChange = { [weak self] model in self?.barChanged(model) }
 
         checklist = SetupChecklist(coordinator: coordinator)
@@ -36,7 +37,7 @@ import SuperbrowserCore
                                 },
                                 showChecklist: { [weak self] in self?.checklist.show() })
 
-        hotkeys = Hotkeys(onSlot: { [weak coordinator] slot in coordinator?.activate(slot: slot) })
+        hotkeys = Hotkeys(onSlot: { [weak self] slot in self?.whenTrusted { $0.coordinator.activate(slot: slot) } })
         registerHotkeys(coordinator.settings.hotkeyModifier)
 
         startServer(coordinator)
@@ -112,6 +113,16 @@ import SuperbrowserCore
         log("local server couldn't start (port 47321 in use?): \(message); continuing without extension reports")
     }
 
+    /// Without Accessibility, Superbrowser sees none of Chrome's windows, so every switch would open
+    /// another window: show the setup checklist instead.
+    private func whenTrusted(_ action: (AppDelegate) -> Void) {
+        guard AXIsProcessTrusted() else {
+            checklist.show()
+            return
+        }
+        action(self)
+    }
+
     private func barChanged(_ model: BarModel) {
         bar.apply(model)
         if model.modifier != registeredModifier { registerHotkeys(model.modifier) }
@@ -126,10 +137,11 @@ import SuperbrowserCore
         }
     }
 
-    /// Re-reads Chrome's `Local State`; tells the coordinator only when the list changed.
+    /// Re-reads Chrome's `Local State`; tells the coordinator only when the list changed. An empty list
+    /// while profiles were known is ignored (`Local State` unreadable mid-write, not every profile deleted).
     private func refreshProfiles() {
         let fresh = loadChromeProfiles()
-        guard fresh != profiles else { return }
+        guard fresh != profiles, !(fresh.isEmpty && !profiles.isEmpty) else { return }
         profiles = fresh
         coordinator.updateProfiles(fresh)
     }
