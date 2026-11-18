@@ -1,4 +1,5 @@
 import CoreGraphics
+import Foundation
 
 /// Chrome's windows as seen through Accessibility. All rects are AX coordinates.
 @MainActor public protocol WindowSystem: AnyObject {
@@ -48,6 +49,7 @@ public struct BarModel: Equatable, Sendable {
     public private(set) var barModel: BarModel
 
     private let windows: WindowSystem
+    private let now: () -> Date
     private let launcher: ChromeLaunching
     private let store: SettingsStore
     private var profiles: [ChromeProfile]
@@ -73,13 +75,17 @@ public struct BarModel: Equatable, Sendable {
     private var mru: [WindowID] = []
     private var front: WindowID?
     private var chromeActive = true
+    /// The last time a user move was corrected to keep the bar on screen.
+    private var lastCorrection: (id: WindowID, at: Date)?
 
     private static let ownMoveTolerance: CGFloat = 2
+    private static let correctionGuard: TimeInterval = 1
     private static let inPlaceTolerance: CGFloat = 0.5
     private static let inactiveStates: Set<String> = ["minimized", "fullscreen", "locked-fullscreen"]
 
     public init(windows: WindowSystem, launcher: ChromeLaunching, store: SettingsStore,
-                profiles: [ChromeProfile], screens: [CGRect]) {
+                profiles: [ChromeProfile], screens: [CGRect], now: @escaping () -> Date = Date.init) {
+        self.now = now
         self.windows = windows
         self.launcher = launcher
         self.store = store
@@ -123,8 +129,21 @@ public struct BarModel: Equatable, Sendable {
         guard let w = ax[id], isSnappable(w) else { return }
         // The user moved a managed window: it leads, everything else follows.
         ownMoves[id] = rect
-        applyFrame(FrameLayout.frame(fromContent: rect, position: settings.barPosition))
-        snapAll(ax, except: id)
+        let derived = FrameLayout.frame(fromContent: rect, position: settings.barPosition)
+        let clamped = FrameLayout.clamp(derived, into: screens)
+        applyFrame(clamped)
+        // Moved or zoomed so the bar would leave the screen: pull the leader back in too, once per
+        // user move. A second off-screen report right after a correction means Chrome didn't honour
+        // it; trying again would loop.
+        let recentlyCorrected = lastCorrection.map {
+            $0.id == id && now().timeIntervalSince($0.at) < Self.correctionGuard
+        } ?? false
+        if clamped != derived, !recentlyCorrected {
+            lastCorrection = (id, now())
+            snapAll(ax)
+        } else {
+            snapAll(ax, except: id)
+        }
         refreshBar()
     }
 

@@ -37,6 +37,12 @@ final class FakeLauncher: ChromeLaunching {
     func openClaim(profileDir: String) { claimed.append(profileDir) }
 }
 
+@MainActor
+final class TestClock {
+    var now = Date(timeIntervalSinceReferenceDate: 0)
+    func advance(_ seconds: TimeInterval) { now += seconds }
+}
+
 // MARK: - Helpers
 
 private let screen = CGRect(x: 0, y: 25, width: 1440, height: 875)
@@ -62,6 +68,7 @@ private func withHeight(_ r: CGRect, _ h: CGFloat) -> CGRect {
 private struct Harness {
     let ws = FakeWindowSystem()
     let launcher = FakeLauncher()
+    let clock = TestClock()
     let store: SettingsStore
     let coordinator: Coordinator
 
@@ -78,7 +85,9 @@ private struct Harness {
         configure(&s)
         try! store.save(s)
         setup(ws)
-        coordinator = Coordinator(windows: ws, launcher: launcher, store: store, profiles: profiles, screens: screens)
+        let clock = self.clock
+        coordinator = Coordinator(windows: ws, launcher: launcher, store: store, profiles: profiles, screens: screens,
+                                  now: { clock.now })
     }
 
     func tab(_ dir: String) -> BarTab? { coordinator.barModel.tabs.first { $0.profileDir == dir } }
@@ -146,6 +155,49 @@ struct CoordinatorTests {
         #expect(h.store.load().frame == expectedFrame)
         #expect(h.coordinator.barModel.barRect == CGRect(x: 200, y: 68, width: 1000, height: 32))
         #expect(bars.last?.barRect == CGRect(x: 200, y: 68, width: 1000, height: 32))
+    }
+
+    @Test func zoomedWindowKeepsBarOnScreen() {
+        let h = Harness { $0.add(1, A); $0.add(2, B) }
+        h.coordinator.receive(report("P1", [(10, A)]))
+        h.coordinator.receive(report("P2", [(20, B)]))
+        h.ws.setFrameCalls = []
+
+        // The user zooms window 1 to fill the screen: the bar would end up above the screen's top.
+        h.ws.windows[1]?.frame = screen
+        h.coordinator.windowMoved(1, to: screen)
+        #expect(h.coordinator.settings.frame == screen)
+        #expect(h.coordinator.barModel.barRect == CGRect(x: 0, y: 25, width: 1440, height: 32))
+        #expect(h.ws.didSet(1, C))                      // the leader is snapped below the bar
+        #expect(!h.ws.setFrameCalls.contains { $0.id == 2 })
+    }
+
+    @Test func ownCorrectionDoesNotLoop() {
+        let h = Harness { $0.add(1, A); $0.add(2, B) }
+        h.coordinator.receive(report("P1", [(10, A)]))
+        h.coordinator.receive(report("P2", [(20, B)]))
+        h.ws.windows[1]?.frame = screen
+        h.coordinator.windowMoved(1, to: screen)
+        #expect(h.ws.didSet(1, C))
+        h.ws.setFrameCalls = []
+
+        // Our correction landing is an own move.
+        h.coordinator.windowMoved(1, to: C)
+        #expect(h.ws.setFrameCalls.isEmpty)
+
+        // Chrome didn't honour the correction: one correction per user move, no second attempt.
+        h.ws.windows[1]?.frame = screen
+        h.coordinator.windowMoved(1, to: screen)
+        #expect(h.ws.setFrameCalls.isEmpty)
+        #expect(h.coordinator.settings.frame == screen)
+
+        // A later user move and zoom is corrected again.
+        h.clock.advance(5)
+        h.ws.windows[1]?.frame = A
+        h.coordinator.windowMoved(1, to: A)
+        h.ws.windows[1]?.frame = screen
+        h.coordinator.windowMoved(1, to: screen)
+        #expect(h.ws.didSet(1, C))
     }
 
     @Test func activateOpensNewWindowWhenNone() {
