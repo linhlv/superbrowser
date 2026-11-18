@@ -14,10 +14,17 @@ export function buildReport(profileDir, windows) {
   };
 }
 
-export function claimFromUrl(url) {
+/** The one-time nonce in a Superbrowser claim URL, or null. The profile dir is never taken from the URL. */
+export function nonceFromClaimUrl(url) {
   let u;
   try { u = new URL(url); } catch { return null; }
   if (u.origin !== CLAIM_ORIGIN || u.pathname !== "/claim") return null;
-  const dir = u.searchParams.get("dir");
-  return dir ? dir : null;
+  const nonce = u.searchParams.get("nonce");
+  return nonce && /^[0-9a-f]{32}$/.test(nonce) ? nonce : null;
+}
+
+/** The profile dir in the app's `POST /claim/confirm` reply, or null. */
+export function profileDirFromConfirmReply(reply) {
+  const dir = reply && reply.profileDir;
+  return typeof dir === "string" && dir ? dir : null;
 }

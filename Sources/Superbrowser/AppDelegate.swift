@@ -13,11 +13,12 @@ import SuperbrowserCore
     private var checklist: SetupChecklist!
     private var registeredModifier: HotkeyModifier?
     private var observers: [NSObjectProtocol] = []
+    private let claims = ClaimRegistry()
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         profiles = loadChromeProfiles()
         let chrome = ChromeAX()
-        let coordinator = Coordinator(windows: chrome, launcher: ChromeLauncher(),
+        let coordinator = Coordinator(windows: chrome, launcher: ChromeLauncher(claims: claims),
                                       store: SettingsStore(url: SettingsStore.defaultURL),
                                       profiles: profiles, screens: Self.axScreens())
         self.chrome = chrome
@@ -89,6 +90,7 @@ import SuperbrowserCore
 
     private func startServer(_ coordinator: Coordinator) {
         let server = ReportServer(
+            claims: claims,
             onReport: { [weak coordinator] report in coordinator?.receive(report) },
             profileName: { [weak self] dir in self?.profiles.first { $0.dir == dir }?.name })
         server.onStateChange = { [weak self] state in

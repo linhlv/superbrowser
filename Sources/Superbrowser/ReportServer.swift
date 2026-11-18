@@ -2,7 +2,9 @@ import Foundation
 import Network
 import SuperbrowserCore
 
-/// Loopback-only HTTP server: `POST /report` from the helper extension, `GET /claim?dir=` for profile linking.
+/// Loopback-only HTTP server: `POST /report` from the helper extension; `GET /claim?nonce=` (the page
+/// Superbrowser opens in a profile to link it) and `POST /claim/confirm` (the extension trading that
+/// one-time nonce for its profile dir).
 @MainActor
 final class ReportServer {
     nonisolated static let maxRequestBytes = 1 << 20
@@ -11,6 +13,7 @@ final class ReportServer {
     private let port: UInt16
     private let onReport: @MainActor (ExtensionReport) -> Void
     private let profileName: @MainActor (String) -> String?
+    private let claims: ClaimRegistry
     private let queue = DispatchQueue(label: "superbrowser.report-server")
     private var listener: NWListener?
 
@@ -22,9 +25,11 @@ final class ReportServer {
     var onStateChange: (@MainActor (State) -> Void)?
 
     init(port: UInt16 = 47321,
+         claims: ClaimRegistry,
          onReport: @MainActor @escaping (ExtensionReport) -> Void,
          profileName: @MainActor @escaping (String) -> String?) {
         self.port = port
+        self.claims = claims
         self.onReport = onReport
         self.profileName = profileName
     }
@@ -73,19 +78,29 @@ final class ReportServer {
     private func handle(_ request: HTTPRequest) -> Data {
         switch (request.method, request.path) {
         case ("POST", "/report"):
-            guard request.headers["content-type"]?.lowercased().hasPrefix("application/json") == true else {
-                return Self.reply(415, "text/plain", "unsupported media type")
-            }
-            if let origin = request.headers["origin"], !origin.hasPrefix("chrome-extension://") {
-                return Self.reply(403, "text/plain", "forbidden")
-            }
+            if let rejected = Self.rejectNonExtensionJSON(request) { return rejected }
             guard let report = try? JSONDecoder().decode(ExtensionReport.self, from: request.body) else {
                 return Self.reply(400, "text/plain", "bad report")
             }
             onReport(report)
             return httpResponse(status: 204, contentType: "text/plain", body: Data())
+        case ("POST", "/claim/confirm"):
+            if let rejected = Self.rejectNonExtensionJSON(request) { return rejected }
+            guard let nonce = claimConfirmNonce(from: request.body), let dir = claims.confirm(nonce) else {
+                return Self.reply(404, "text/plain", "unknown or expired claim")
+            }
+            return httpResponse(status: 200, contentType: "application/json", body: claimConfirmReply(profileDir: dir))
         case ("GET", "/claim"):
-            let dir = request.query["dir"] ?? ""
+            guard let dir = claims.profileDir(forNonce: request.query["nonce"] ?? "") else {
+                let page = """
+                <!doctype html><html><head><meta charset="utf-8"><title>Superbrowser</title></head>\
+                <body style="font-family: -apple-system, sans-serif; margin: 3em;">\
+                <h2>This link has expired.</h2>\
+                <p>Use Link Profiles… in the Superbrowser menu to link this profile.</p>\
+                </body></html>
+                """
+                return Self.reply(404, "text/html; charset=utf-8", page)
+            }
             let name = profileName(dir) ?? dir
             let page = """
             <!doctype html><html><head><meta charset="utf-8"><title>Superbrowser</title></head>\
@@ -98,6 +113,18 @@ final class ReportServer {
         default:
             return Self.reply(404, "text/plain", "not found")
         }
+    }
+
+    /// Requests to the extension endpoints must be JSON (so a web page can't send them without a CORS
+    /// preflight, which is refused) and, when the browser says where they come from, from an extension.
+    nonisolated static func rejectNonExtensionJSON(_ request: HTTPRequest) -> Data? {
+        guard request.headers["content-type"]?.lowercased().hasPrefix("application/json") == true else {
+            return reply(415, "text/plain", "unsupported media type")
+        }
+        if let origin = request.headers["origin"], !origin.hasPrefix("chrome-extension://") {
+            return reply(403, "text/plain", "forbidden")
+        }
+        return nil
     }
 
     nonisolated static func htmlEscape(_ s: String) -> String {

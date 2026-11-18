@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildReport, claimFromUrl } from "../report.js";
+import { buildReport, nonceFromClaimUrl, profileDirFromConfirmReply } from "../report.js";
 
 test("buildReport keeps only normal windows", () => {
   const r = buildReport("Default", [
@@ -22,11 +22,28 @@ test("buildReport maps bounds fields", () => {
   });
 });
 
-test("claimFromUrl decodes profile dir", () => {
-  assert.equal(claimFromUrl("http://127.0.0.1:47321/claim?dir=Profile%2037"), "Profile 37");
+const NONCE = "0123456789abcdef0123456789abcdef";
+
+test("nonceFromClaimUrl reads the nonce", () => {
+  assert.equal(nonceFromClaimUrl(`http://127.0.0.1:47321/claim?nonce=${NONCE}`), NONCE);
 });
 
-test("claimFromUrl rejects other origins", () => {
-  assert.equal(claimFromUrl("http://example.com/claim?dir=Default"), null);
-  assert.equal(claimFromUrl("http://127.0.0.1:47321/claim"), null);
+test("nonceFromClaimUrl rejects other origins, paths and malformed nonces", () => {
+  assert.equal(nonceFromClaimUrl(`http://example.com/claim?nonce=${NONCE}`), null);
+  assert.equal(nonceFromClaimUrl(`http://127.0.0.1:47321/report?nonce=${NONCE}`), null);
+  assert.equal(nonceFromClaimUrl("http://127.0.0.1:47321/claim"), null);
+  assert.equal(nonceFromClaimUrl("http://127.0.0.1:47321/claim?nonce=Profile%2037"), null);
+  assert.equal(nonceFromClaimUrl("not a url"), null);
+});
+
+test("nonceFromClaimUrl never takes a profile dir from the URL", () => {
+  assert.equal(nonceFromClaimUrl("http://127.0.0.1:47321/claim?dir=Default"), null);
+});
+
+test("profileDirFromConfirmReply reads the app's answer", () => {
+  assert.equal(profileDirFromConfirmReply({ profileDir: "Profile 37" }), "Profile 37");
+  assert.equal(profileDirFromConfirmReply({}), null);
+  assert.equal(profileDirFromConfirmReply({ profileDir: "" }), null);
+  assert.equal(profileDirFromConfirmReply({ profileDir: 7 }), null);
+  assert.equal(profileDirFromConfirmReply(null), null);
 });

@@ -5,15 +5,20 @@ import SuperbrowserCore
 @MainActor
 final class ChromeLauncher: ChromeLaunching {
     private let port: UInt16
-    init(port: UInt16 = 47321) { self.port = port }
+    private let claims: ClaimRegistry
+    init(port: UInt16 = 47321, claims: ClaimRegistry) {
+        self.port = port
+        self.claims = claims
+    }
 
     func openWindow(profileDir: String) {
         run(profileDir: profileDir, urls: [])
     }
 
+    /// The page carries a one-time nonce; the extension trades it with the app for the profile dir.
     func openClaim(profileDir: String) {
-        let encoded = profileDir.addingPercentEncoding(withAllowedCharacters: .unreservedURLChars) ?? profileDir
-        run(profileDir: profileDir, urls: ["http://127.0.0.1:\(port)/claim?dir=\(encoded)"])
+        let nonce = claims.issue(profileDir: profileDir)
+        run(profileDir: profileDir, urls: ["http://127.0.0.1:\(port)/claim?nonce=\(nonce)"])
     }
 
     private func run(profileDir: String, urls: [String]) {
@@ -24,10 +29,4 @@ final class ChromeLauncher: ChromeLaunching {
             FileHandle.standardError.write(Data("ChromeLauncher: failed to run open: \(error)\n".utf8))
         }
     }
-}
-
-extension CharacterSet {
-    /// RFC 3986 unreserved characters only, so `&`, `=`, `+`, `%` and `/` are all encoded.
-    static let unreservedURLChars = CharacterSet(charactersIn:
-        "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~")
 }
