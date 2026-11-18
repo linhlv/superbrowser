@@ -65,14 +65,22 @@ public func matchWindows(unassigned: [AXWindowInfo], available: [ReportedWindowK
     return result
 }
 
-/// Gives each id the content rect with a unique height (shorter by 4 pt per position), so the next
-/// report tells stacked windows apart. The 4 pt step is well above twice the 1 pt match tolerance,
-/// so a fingerprinted window matches only the report at its own height.
-public func fingerprintFrames(_ ids: [WindowID], content: CGRect) -> [WindowID: CGRect] {
+/// Gives each id the content rect with a unique height (content height minus 4, 8, 12, … pt), so the
+/// next report tells stacked windows apart. The 4 pt step is well above twice the 1 pt match tolerance,
+/// so a fingerprinted window matches only the report at its own height. Heights closer than one step
+/// to any of `excludingHeights` (fingerprints still in use) are skipped.
+public func fingerprintFrames(_ ids: [WindowID], content: CGRect,
+                              excludingHeights inUse: Set<CGFloat> = []) -> [WindowID: CGRect] {
     var out: [WindowID: CGRect] = [:]
-    for (i, id) in ids.enumerated() {
+    var step: CGFloat = 0
+    for id in ids {
+        var height: CGFloat
+        repeat {
+            step += 1
+            height = content.height - fingerprintStep * step
+        } while inUse.contains { abs($0 - height) < fingerprintStep }
         var f = content
-        f.size.height = content.height - fingerprintStep * CGFloat(i + 1)
+        f.size.height = height
         out[id] = f
     }
     return out

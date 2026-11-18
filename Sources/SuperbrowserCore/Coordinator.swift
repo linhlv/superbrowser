@@ -56,6 +56,10 @@ public struct BarModel: Equatable, Sendable {
 
     /// Latest report per profile dir (kept for every dir; unknown/hidden ones are filtered on use).
     private var reports: [String: ExtensionReport] = [:]
+    /// Profiles that ever reported (for `isLinked`; survives clearing `reports` when Chrome quits).
+    private var everReported: Set<String> = []
+    /// Reported windows whose assigned AX window vanished; not matchable until their profile reports again.
+    private var deadKeys: Set<ReportedWindowKey> = []
     /// Windows linked to a reported Chrome window of a managed profile.
     private var assigned: [WindowID: ReportedWindowKey] = [:]
     /// Windows adopted by the no-extension fallback profile (provisional: a later report match wins).
@@ -95,6 +99,9 @@ public struct BarModel: Equatable, Sendable {
 
     public func receive(_ report: ExtensionReport) {
         reports[report.profileDir] = report
+        everReported.insert(report.profileDir)
+        // A newer report is the truth for its profile: a key it still lists is alive again.
+        deadKeys = deadKeys.filter { $0.profileDir != report.profileDir }
         sync()
     }
 
@@ -213,20 +220,21 @@ public struct BarModel: Equatable, Sendable {
     private func isManaged(_ id: WindowID) -> Bool { owner(of: id) != nil }
 
     private func isLinked(_ dir: String) -> Bool {
-        reports[dir] != nil || settings.noExtensionProfiles.contains(dir)
+        everReported.contains(dir) || settings.noExtensionProfiles.contains(dir)
     }
 
     private func reportedWindow(_ key: ReportedWindowKey) -> ReportedWindow? {
         reports[key.profileDir]?.windows.first { $0.id == key.chromeId }
     }
 
-    /// Bounds of every reported window that can be matched (not minimized / full screen), any profile.
+    /// Bounds of every reported window that can be matched (not minimized / full screen, not dead), any profile.
     /// Hidden and unknown profiles are included so their windows are recognised and left alone.
     private func matchableReportedBounds() -> [ReportedWindowKey: CGRect] {
         var out: [ReportedWindowKey: CGRect] = [:]
         for (dir, r) in reports {
             for w in r.windows where !Self.inactiveStates.contains(w.state) {
-                out[ReportedWindowKey(profileDir: dir, chromeId: w.id)] = w.bounds
+                let key = ReportedWindowKey(profileDir: dir, chromeId: w.id)
+                if !deadKeys.contains(key) { out[key] = w.bounds }
             }
         }
         return out
@@ -240,7 +248,10 @@ public struct BarModel: Equatable, Sendable {
     }
 
     /// Forgets windows that are gone on either side, or whose profile is no longer managed.
+    /// Reports describing windows that are gone are stale and must not match a new window.
     private func dropVanished(_ ax: [WindowID: AXWindowInfo]) {
+        if ax.isEmpty { reports = [:] }   // Chrome quit (or has no windows): every report is stale
+        for (id, key) in assigned where ax[id] == nil { deadKeys.insert(key) }
         let dirs = managedDirs
         let fallback = fallbackProfile
         assigned = assigned.filter { id, key in
@@ -280,11 +291,14 @@ public struct BarModel: Equatable, Sendable {
         fingerprint(result.ambiguous, ax)
     }
 
-    /// Moves ambiguous windows (plus any still waiting) to unique heights so the next report tells them apart.
+    /// Moves newly ambiguous windows to unique heights so the next report tells them apart.
+    /// Windows already waiting are never moved again (a report about them may be in flight),
+    /// and their heights are not reused.
     private func fingerprint(_ ambiguous: [WindowID], _ ax: [WindowID: AXWindowInfo]) {
-        guard ambiguous.contains(where: { pendingFingerprints[$0] == nil }) else { return }
-        let ids = Set(ambiguous).union(pendingFingerprints.keys).sorted()
-        for (id, rect) in fingerprintFrames(ids, content: content) {
+        let fresh = ambiguous.filter { pendingFingerprints[$0] == nil }
+        guard !fresh.isEmpty else { return }
+        let inUse = Set(pendingFingerprints.values.map(\.height))
+        for (id, rect) in fingerprintFrames(fresh, content: content, excludingHeights: inUse) {
             fallbackOwned[id] = nil
             pendingFingerprints[id] = rect
             move(id, to: rect, ax)

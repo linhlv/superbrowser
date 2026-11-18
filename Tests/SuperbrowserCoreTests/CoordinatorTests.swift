@@ -267,6 +267,63 @@ struct CoordinatorTests {
         #expect(h.coordinator.barModel.tabs.map(\.isLinked) == [true, false, true])
     }
 
+    @Test func staleReportDoesNotClaimWindowAfterChromeRestart() {
+        let h = Harness { $0.add(1, A) }
+        h.coordinator.receive(report("P1", [(10, A)]))
+        h.coordinator.receive(report("P1", [(10, C)]))   // P1's window now sits at C
+        #expect(h.coordinator.owner(of: 1) == "P1")
+
+        h.ws.windows = [:]                               // Chrome quits; P1 never reports again
+        h.coordinator.windowsChanged()
+
+        h.ws.add(7, C)                                   // relaunch: a P2 window opens at C
+        h.coordinator.windowsChanged()
+        #expect(h.coordinator.owner(of: 7) == nil)
+        h.coordinator.receive(report("P2", [(20, C)]))
+        #expect(h.coordinator.owner(of: 7) == "P2")
+        #expect(h.tab("P1")?.windowCount == 0)
+        #expect(h.tab("P1")?.isLinked == true)
+    }
+
+    @Test func closedWindowKeyIsNotReused() {
+        let h = Harness { $0.add(1, A); $0.add(2, B) }
+        h.coordinator.receive(report("P1", [(10, A)]))
+        h.coordinator.receive(report("P2", [(20, B)]))
+        h.coordinator.receive(report("P1", [(10, C)]))
+        h.coordinator.receive(report("P2", [(20, C)]))
+
+        h.ws.windows[1] = nil                            // P1's window closes; P1 has not reported yet
+        h.coordinator.windowsChanged()
+        h.ws.add(3, C)                                   // a new P2 window opens at C
+        h.coordinator.windowsChanged()
+        #expect(h.coordinator.owner(of: 3) == nil)
+        h.coordinator.receive(report("P2", [(20, C), (21, C)]))
+        #expect(h.coordinator.owner(of: 3) == "P2")
+        #expect(h.coordinator.owner(of: 2) == "P2")
+    }
+
+    @Test func waitingFingerprintsAreNeverMoved() {
+        let h = Harness { $0.add(1, C); $0.add(2, C) }
+        h.coordinator.receive(report("P1", [(10, C)]))
+        #expect(h.ws.didSet(1, withHeight(C, 839)))
+        #expect(h.ws.didSet(2, withHeight(C, 835)))
+        h.ws.setFrameCalls = []
+
+        h.ws.windows[1] = nil                            // waiting window 1 closes
+        h.coordinator.windowsChanged()
+        h.ws.add(3, C)                                   // a new window becomes ambiguous (P1#10 and P3#30 at C)
+        h.coordinator.receive(report("P3", [(30, C)]))
+        #expect(!h.ws.setFrameCalls.contains { $0.id == 2 })
+        #expect(h.ws.didSet(3, withHeight(C, 839)))
+
+        // P2's report, generated while window 2 was at 835, still lands on window 2.
+        h.coordinator.receive(report("P2", [(20, withHeight(C, 835))]))
+        #expect(h.coordinator.owner(of: 2) == "P2")
+        #expect(h.coordinator.owner(of: 3) == nil)
+        h.coordinator.receive(report("P3", [(30, withHeight(C, 839))]))
+        #expect(h.coordinator.owner(of: 3) == "P3")
+    }
+
     // MARK: Extra edge cases (controller rulings and design notes)
 
     @Test func emptyScreensKeepFrame() {

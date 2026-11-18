@@ -60,3 +60,9 @@ private func ax(_ id: Int, _ f: CGRect, min: Bool = false, fs: Bool = false) -> 
     #expect(f[5] == CGRect(x: 0, y: 57, width: 1440, height: 839))
     #expect(f[9] == CGRect(x: 0, y: 57, width: 1440, height: 835))
 }
+
+@Test func fingerprintSkipsHeightsInUse() {
+    let f = fingerprintFrames([7, 8], content: A, excludingHeights: [839])
+    #expect(f[7] == CGRect(x: 0, y: 57, width: 1440, height: 835))
+    #expect(f[8] == CGRect(x: 0, y: 57, width: 1440, height: 831))
+}
