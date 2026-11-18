@@ -200,6 +200,7 @@ struct CoordinatorTests {
         h.ws.setFrameCalls = []
 
         h.ws.windows = [:]
+        h.coordinator.chromeTerminated()
         h.coordinator.windowsChanged()
         #expect(h.coordinator.barModel.tabs.allSatisfy { $0.windowCount == 0 })
         #expect(h.ws.setFrameCalls.isEmpty)
@@ -274,6 +275,7 @@ struct CoordinatorTests {
         #expect(h.coordinator.owner(of: 1) == "P1")
 
         h.ws.windows = [:]                               // Chrome quits; P1 never reports again
+        h.coordinator.chromeTerminated()
         h.coordinator.windowsChanged()
 
         h.ws.add(7, C)                                   // relaunch: a P2 window opens at C
@@ -282,6 +284,30 @@ struct CoordinatorTests {
         h.coordinator.receive(report("P2", [(20, C)]))
         #expect(h.coordinator.owner(of: 7) == "P2")
         #expect(h.tab("P1")?.windowCount == 0)
+        #expect(h.tab("P1")?.isLinked == true)
+    }
+
+    @Test func emptyWindowListKeepsReports() {
+        // Chrome runs with its windows on another Space: AX lists nothing, but reports keep arriving.
+        let h = Harness { _ in }
+        h.coordinator.receive(report("P1", [(10, A)]))
+        h.coordinator.windowsChanged()
+        #expect(h.coordinator.owner(of: 1) == nil)
+
+        h.ws.add(1, A)                                   // the window shows up later at its reported bounds
+        h.coordinator.windowsChanged()
+        #expect(h.coordinator.owner(of: 1) == "P1")
+        #expect(h.ws.didSet(1, C))
+    }
+
+    @Test func chromeTerminatedClearsReports() {
+        let h = Harness { _ in }
+        h.coordinator.receive(report("P1", [(10, A)]))
+        h.coordinator.chromeTerminated()
+
+        h.ws.add(1, A)                                   // relaunch: a window at the old reported bounds
+        h.coordinator.windowsChanged()
+        #expect(h.coordinator.owner(of: 1) == nil)
         #expect(h.tab("P1")?.isLinked == true)
     }
 

@@ -107,6 +107,14 @@ public struct BarModel: Equatable, Sendable {
 
     public func windowsChanged() { sync() }
 
+    /// Chrome quit: every report is stale and every window is gone.
+    /// (An empty window list alone doesn't mean this: Chrome's windows may be on another Space.)
+    public func chromeTerminated() {
+        reports = [:]
+        dropVanished([:])
+        refreshBar()
+    }
+
     public func windowMoved(_ id: WindowID, to rect: CGRect) {
         if let own = ownMoves[id], rect.isWithin(Self.ownMoveTolerance, of: own) { return }
         guard isManaged(id) else { return }
@@ -250,7 +258,6 @@ public struct BarModel: Equatable, Sendable {
     /// Forgets windows that are gone on either side, or whose profile is no longer managed.
     /// Reports describing windows that are gone are stale and must not match a new window.
     private func dropVanished(_ ax: [WindowID: AXWindowInfo]) {
-        if ax.isEmpty { reports = [:] }   // Chrome quit (or has no windows): every report is stale
         for (id, key) in assigned where ax[id] == nil { deadKeys.insert(key) }
         let dirs = managedDirs
         let fallback = fallbackProfile

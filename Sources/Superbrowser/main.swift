@@ -59,6 +59,7 @@ MainActor.assumeIsolated {
     chrome.onWindowMoved = { id, rect in print("ax: moved #\(id) -> \(describe(rect))") }
     chrome.onFrontWindowChanged = { id in print("ax: front window -> \(id.map { "#\($0)" } ?? "none")") }
     chrome.onChromeActiveChanged = { active in print("ax: chrome active -> \(active)") }
+    chrome.onChromeTerminated = { print("ax: chrome terminated") }
     chrome.start()
     logWindows("initial")
 }

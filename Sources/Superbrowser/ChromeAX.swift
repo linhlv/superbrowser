@@ -16,13 +16,21 @@ final class ChromeAX: WindowSystem {
     var onWindowMoved: ((WindowID, CGRect) -> Void)?
     var onFrontWindowChanged: ((WindowID?) -> Void)?
     var onChromeActiveChanged: ((Bool) -> Void)?
+    /// The attached Chrome quit (fired before the matching `onWindowsChanged`).
+    var onChromeTerminated: (() -> Void)?
 
     private static let moveDebounce: Duration = .milliseconds(150)
     private static let ownMoveSettle: Duration = .milliseconds(250)
     private static let changeDebounce: Duration = .milliseconds(100)
     private static let trustPoll: Duration = .seconds(2)
-    private static let attachRetry: Duration = .milliseconds(500)
-    private static let maxAttachAttempts = 6
+    private static let observeRetry: Duration = .milliseconds(500)
+    private static let slowObserveRetry: Duration = .seconds(5)
+    private static let quickObserveAttempts = 6
+    private static let messagingTimeout: Float = 1.0
+    private static let appNotifications = [kAXWindowCreatedNotification, kAXFocusedWindowChangedNotification,
+                                           kAXMainWindowChangedNotification]
+    private static let windowNotifications = [kAXMovedNotification, kAXResizedNotification,
+                                              kAXUIElementDestroyedNotification]
     private static let ownMoveTolerance: CGFloat = 2
 
     private struct Entry {
@@ -46,7 +54,7 @@ final class ChromeAX: WindowSystem {
     private var settling: [WindowID: (rect: CGRect, task: Task<Void, Never>?)] = [:]
     private var changeTask: Task<Void, Never>?
     private var trustTask: Task<Void, Never>?
-    private var attachTask: Task<Void, Never>?
+    private var observeTask: Task<Void, Never>?
     private var workspaceTokens: [NSObjectProtocol] = []
     private var started = false
     private var warnedUntrusted = false
@@ -66,6 +74,8 @@ final class ChromeAX: WindowSystem {
     func start() {
         guard !started else { return }
         started = true
+        // Don't let a busy Chrome stall the main thread for the default ~6 s per AX call.
+        AXUIElementSetMessagingTimeout(AXUIElementCreateSystemWide(), Self.messagingTimeout)
         observe(NSWorkspace.didLaunchApplicationNotification) { me, _ in me.chromeLaunched() }
         observe(NSWorkspace.didTerminateApplicationNotification) { me, pid in me.chromeTerminated(pid: pid) }
         observe(NSWorkspace.didActivateApplicationNotification) { me, _ in me.onChromeActiveChanged?(true) }
@@ -103,53 +113,58 @@ final class ChromeAX: WindowSystem {
         // `open -na` briefly starts a second Chrome process that hands off and exits; ignore it.
         guard let app, app.processIdentifier == pid else { return }
         detach()
+        onChromeTerminated?()
         if AXIsProcessTrusted() { attachToRunningChrome() }
         scheduleWindowsChanged()
     }
 
+    /// Lists the running Chrome's windows right away; observing them follows, retrying until Chrome is ready.
     private func attachToRunningChrome() {
+        // The oldest instance: a transient `open -na` process must not be mistaken for Chrome.
         guard app == nil,
               let running = NSRunningApplication.runningApplications(withBundleIdentifier: Self.bundleID)
-                .first(where: { !$0.isTerminated }) else { return }
-        attach(running, attempt: 1)
+                .filter({ !$0.isTerminated })
+                .min(by: { ($0.launchDate ?? .distantFuture) < ($1.launchDate ?? .distantFuture) }) else { return }
+        app = running
+        appElement = AXUIElementCreateApplication(running.processIdentifier)
+        scanWindows()
+        startObserving(attempt: 1)
     }
 
-    private func attach(_ running: NSRunningApplication, attempt: Int) {
-        let pid = running.processIdentifier
+    private func startObserving(attempt: Int) {
+        guard observer == nil, let app, let appElement else { return }
         var created: AXObserver?
-        guard AXObserverCreate(pid, axCallback, &created) == .success, let observer = created else {
-            log("couldn't create an AX observer for Chrome (pid \(pid))")
-            return
-        }
-        let element = AXUIElementCreateApplication(pid)
-        let refcon = Unmanaged.passUnretained(self).toOpaque()
-        let appNotifications = [kAXWindowCreatedNotification, kAXFocusedWindowChangedNotification, kAXMainWindowChangedNotification]
-        let results = appNotifications.map { AXObserverAddNotification(observer, element, $0 as CFString, refcon) }
-        if let failure = results.first(where: { $0 != .success && $0 != .notificationAlreadyRegistered }) {
-            // Chrome may not be ready for AX right after launching; retry a few times.
-            for name in appNotifications { AXObserverRemoveNotification(observer, element, name as CFString) }
-            guard attempt < Self.maxAttachAttempts else {
-                log("couldn't observe Chrome (AX error \(failure.rawValue)); giving up")
+        var error = AXObserverCreate(app.processIdentifier, axCallback, &created)
+        if error == .success, let observer = created {
+            let refcon = Unmanaged.passUnretained(self).toOpaque()
+            let failures = Self.appNotifications
+                .map { AXObserverAddNotification(observer, appElement, $0 as CFString, refcon) }
+                .filter { $0 != .success && $0 != .notificationAlreadyRegistered }
+            if failures.isEmpty {
+                CFRunLoopAddSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(observer), .commonModes)
+                self.observer = observer
+                for entry in registry.values { subscribe(entry.element) }
+                if scanWindows() { scheduleWindowsChanged() }
                 return
             }
-            attachTask?.cancel()
-            attachTask = Task { [weak self] in
-                try? await Task.sleep(for: Self.attachRetry)
-                guard !Task.isCancelled, let self, self.app == nil, !running.isTerminated else { return }
-                self.attach(running, attempt: attempt + 1)
-                if self.app != nil { self.scheduleWindowsChanged() }
-            }
-            return
+            error = failures[0]
+            for name in Self.appNotifications { AXObserverRemoveNotification(observer, appElement, name as CFString) }
         }
-        CFRunLoopAddSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(observer), .commonModes)
-        self.app = running
-        self.appElement = element
-        self.observer = observer
-        scanWindows()
+        // Chrome may not be ready for AX right after launching: retry quickly, then keep trying slowly.
+        if attempt == Self.quickObserveAttempts {
+            log("couldn't observe Chrome yet (AX error \(error.rawValue)); retrying every 5 s")
+        }
+        let delay = attempt < Self.quickObserveAttempts ? Self.observeRetry : Self.slowObserveRetry
+        observeTask?.cancel()
+        observeTask = Task { [weak self] in
+            try? await Task.sleep(for: delay)
+            guard !Task.isCancelled, let self else { return }
+            self.startObserving(attempt: attempt + 1)
+        }
     }
 
     private func detach() {
-        attachTask?.cancel(); attachTask = nil
+        observeTask?.cancel(); observeTask = nil
         if let observer {
             CFRunLoopRemoveSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(observer), .commonModes)
         }
@@ -225,11 +240,23 @@ final class ChromeAX: WindowSystem {
 
     func raise(_ id: WindowID) {
         guard let element = registry[id]?.element else { return }
-        AXUIElementSetAttributeValue(element, kAXMinimizedAttribute as CFString, kCFBooleanFalse)
-        AXUIElementPerformAction(element, kAXRaiseAction as CFString)
+        var steps: [() -> AXError] = [
+            { AXUIElementSetAttributeValue(element, kAXMinimizedAttribute as CFString, kCFBooleanFalse) },
+            { AXUIElementPerformAction(element, kAXRaiseAction as CFString) },
+            { AXUIElementSetAttributeValue(element, kAXMainAttribute as CFString, kCFBooleanTrue) },
+        ]
         if let appElement {
-            AXUIElementSetAttributeValue(appElement, kAXMainWindowAttribute as CFString, element)
-            AXUIElementSetAttributeValue(appElement, kAXFocusedWindowAttribute as CFString, element)
+            steps += [
+                { AXUIElementSetAttributeValue(appElement, kAXMainWindowAttribute as CFString, element) },
+                { AXUIElementSetAttributeValue(appElement, kAXFocusedWindowAttribute as CFString, element) },
+            ]
+        }
+        for step in steps where step() == .invalidUIElement {
+            forget(id)
+            scheduleWindowsChanged()
+            return
+        }
+        if let appElement {
             AXUIElementSetAttributeValue(appElement, kAXFrontmostAttribute as CFString, kCFBooleanTrue)
         }
         app?.activate()
@@ -237,29 +264,39 @@ final class ChromeAX: WindowSystem {
 
     // MARK: - Registry
 
-    /// Adds standard windows newly listed by `kAXWindowsAttribute`. Never removes anything.
-    private func scanWindows() {
-        guard let appElement else { return }
+    /// Adds standard windows newly listed by `kAXWindowsAttribute`; true if any were added. Never removes anything.
+    @discardableResult
+    private func scanWindows() -> Bool {
+        guard let appElement else { return false }
         var value: CFTypeRef?
         guard AXUIElementCopyAttributeValue(appElement, kAXWindowsAttribute as CFString, &value) == .success,
-              let elements = value as? [AXUIElement] else { return }
-        for element in elements { _ = register(element) }
+              let elements = value as? [AXUIElement] else { return false }
+        var added = false
+        for element in elements where lookup(element) == nil {
+            if register(element) != nil { added = true }
+        }
+        return added
     }
 
-    /// The window's id, registering it (and observing it) if it's a new standard window.
+    /// The window's id, registering it (and observing it, once the observer exists) if it's a new standard window.
     private func register(_ element: AXUIElement) -> WindowID? {
         if let id = lookup(element) { return id }
-        guard let observer, stringAttr(element, kAXSubroleAttribute) == kAXStandardWindowSubrole else { return nil }
+        guard stringAttr(element, kAXSubroleAttribute) == kAXStandardWindowSubrole else { return nil }
         let id = nextID
         nextID += 1
         let placeholder = AXWindowInfo(id: id, frame: .zero, title: "", isMinimized: false, isFullScreen: false)
         registry[id] = Entry(element: element, info: placeholder, isStandard: true)
         if refresh(id) == .invalid { registry[id] = nil; return nil }
+        subscribe(element)
+        return id
+    }
+
+    private func subscribe(_ element: AXUIElement) {
+        guard let observer else { return }
         let refcon = Unmanaged.passUnretained(self).toOpaque()
-        for name in [kAXMovedNotification, kAXResizedNotification, kAXUIElementDestroyedNotification] {
+        for name in Self.windowNotifications {
             AXObserverAddNotification(observer, element, name as CFString, refcon)
         }
-        return id
     }
 
     private func lookup(_ element: AXUIElement) -> WindowID? {
@@ -271,22 +308,29 @@ final class ChromeAX: WindowSystem {
         moveTasks.removeValue(forKey: id)?.cancel()
         settling.removeValue(forKey: id)?.task?.cancel()
         if let observer {
-            for name in [kAXMovedNotification, kAXResizedNotification, kAXUIElementDestroyedNotification] {
+            for name in Self.windowNotifications {
                 AXObserverRemoveNotification(observer, entry.element, name as CFString)
             }
         }
     }
 
-    /// Re-reads a registered window's attributes; a failed read (other than invalid) keeps the last value.
+    /// Re-reads a registered window's attributes. A failed read keeps the last value; after a timeout
+    /// (`cannotComplete`) the remaining attributes aren't read either, so a hung Chrome costs one timeout.
     private func refresh(_ id: WindowID) -> ReadResult {
         guard var entry = registry[id] else { return .invalid }
         let el = entry.element
         var invalid = false
+        var stop = false
         func read(_ attr: String) -> CFTypeRef? {
+            guard !stop else { return nil }
             var value: CFTypeRef?
-            let err = AXUIElementCopyAttributeValue(el, attr as CFString, &value)
-            if err == .invalidUIElement { invalid = true }
-            return err == .success ? value : nil
+            switch AXUIElementCopyAttributeValue(el, attr as CFString, &value) {
+            case .success: return value
+            case .invalidUIElement: invalid = true; stop = true
+            case .cannotComplete: stop = true
+            default: break
+            }
+            return nil
         }
         if let v = read(kAXPositionAttribute), let p = point(v) { entry.info.frame.origin = p }
         if let v = read(kAXSizeAttribute), let s = size(v) { entry.info.frame.size = s }
