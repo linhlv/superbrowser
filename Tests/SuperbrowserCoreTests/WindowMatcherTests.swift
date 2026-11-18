@@ -57,6 +57,6 @@ private func ax(_ id: Int, _ f: CGRect, min: Bool = false, fs: Bool = false) -> 
 
 @Test func fingerprintHeightsUnique() {
     let f = fingerprintFrames([5, 9], content: A)
-    #expect(f[5] == CGRect(x: 0, y: 57, width: 1440, height: 842))
-    #expect(f[9] == CGRect(x: 0, y: 57, width: 1440, height: 841))
+    #expect(f[5] == CGRect(x: 0, y: 57, width: 1440, height: 839))
+    #expect(f[9] == CGRect(x: 0, y: 57, width: 1440, height: 835))
 }

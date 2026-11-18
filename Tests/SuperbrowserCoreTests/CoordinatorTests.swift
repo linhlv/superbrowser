@@ -99,15 +99,15 @@ struct CoordinatorTests {
         let h = Harness { $0.add(1, C); $0.add(2, C) }
         h.coordinator.receive(report("P1", [(10, C)]))
         h.coordinator.receive(report("P2", [(20, C)]))
-        #expect(h.ws.didSet(1, withHeight(C, 842)))
-        #expect(h.ws.didSet(2, withHeight(C, 841)))
+        #expect(h.ws.didSet(1, withHeight(C, 839)))
+        #expect(h.ws.didSet(2, withHeight(C, 835)))
         // Nothing is assigned while the stack is ambiguous.
         #expect(h.tab("P1")?.windowCount == 0)
         #expect(h.tab("P2")?.windowCount == 0)
 
         h.ws.setFrameCalls = []
-        h.coordinator.receive(report("P1", [(10, withHeight(C, 842))]))
-        h.coordinator.receive(report("P2", [(20, withHeight(C, 841))]))
+        h.coordinator.receive(report("P1", [(10, withHeight(C, 839))]))
+        h.coordinator.receive(report("P2", [(20, withHeight(C, 835))]))
         #expect(h.coordinator.owner(of: 1) == "P1")
         #expect(h.coordinator.owner(of: 2) == "P2")
         #expect(h.ws.didSet(1, C))

@@ -58,9 +58,10 @@ public struct BarModel: Equatable, Sendable {
     private var reports: [String: ExtensionReport] = [:]
     /// Windows linked to a reported Chrome window of a managed profile.
     private var assigned: [WindowID: ReportedWindowKey] = [:]
-    /// Windows adopted by the no-extension fallback profile (provisional: a later exact report match wins).
+    /// Windows adopted by the no-extension fallback profile (provisional: a later report match wins).
     private var fallbackOwned: [WindowID: String] = [:]
-    /// Ambiguous windows moved to a unique fingerprint rect, waiting for a report at exactly that rect.
+    /// Ambiguous windows moved to a unique fingerprint rect and waiting for the next report;
+    /// tracked so a later fingerprint round never reuses a height still in use.
     private var pendingFingerprints: [WindowID: CGRect] = [:]
     /// Rects we last passed to `setFrame`, so the resulting move notifications are ignored.
     private var ownMoves: [WindowID: CGRect] = [:]
@@ -69,7 +70,7 @@ public struct BarModel: Equatable, Sendable {
     private var front: WindowID?
 
     private static let ownMoveTolerance: CGFloat = 2
-    private static let exactTolerance: CGFloat = 0.5
+    private static let inPlaceTolerance: CGFloat = 0.5
     private static let inactiveStates: Set<String> = ["minimized", "fullscreen", "locked-fullscreen"]
 
     public init(windows: WindowSystem, launcher: ChromeLaunching, store: SettingsStore,
@@ -246,7 +247,10 @@ public struct BarModel: Equatable, Sendable {
             ax[id] != nil && dirs.contains(key.profileDir) && reportedWindow(key) != nil
         }
         fallbackOwned = fallbackOwned.filter { id, dir in ax[id] != nil && dir == fallback }
-        pendingFingerprints = pendingFingerprints.filter { ax[$0.key] != nil }
+        // A fingerprinted window that left its fingerprint rect (e.g. the user moved it) stops waiting.
+        pendingFingerprints = pendingFingerprints.filter { id, rect in
+            ax[id].map { $0.frame.isWithin(Self.inPlaceTolerance, of: rect) } ?? false
+        }
         ownMoves = ownMoves.filter { ax[$0.key] != nil }
         mru.removeAll { ax[$0] == nil }
         if let f = front, ax[f] == nil { front = nil }
@@ -254,17 +258,14 @@ public struct BarModel: Equatable, Sendable {
 
     private func adoptNewWindows(_ ax: [WindowID: AXWindowInfo]) {
         let linked = Set(assigned.values)
-        var available = matchableReportedBounds().filter { !linked.contains($0.key) }
-        // Fallback-owned windows stay candidates, so a later exact report match takes them over.
-        var candidates = ax.values.filter { assigned[$0.id] == nil }.sorted { $0.id < $1.id }
-
-        var matches = resolveFingerprints(&candidates, &available)
+        let available = matchableReportedBounds().filter { !linked.contains($0.key) }
+        // Fallback-owned windows stay candidates, so a later report match takes them over.
+        let candidates = ax.values.filter { assigned[$0.id] == nil }.sorted { $0.id < $1.id }
         let result = matchWindows(unassigned: candidates, available: available,
                                   fallbackProfile: reports.isEmpty ? nil : fallbackProfile)
-        matches.merge(result.assigned) { a, _ in a }
 
         let dirs = managedDirs
-        for (id, key) in matches.sorted(by: { $0.key < $1.key }) {
+        for (id, key) in result.assigned.sorted(by: { $0.key < $1.key }) {
             fallbackOwned[id] = nil
             pendingFingerprints[id] = nil
             guard dirs.contains(key.profileDir) else { continue }   // hidden/unknown profile: leave it alone
@@ -277,25 +278,6 @@ public struct BarModel: Equatable, Sendable {
             snap(id, ax)
         }
         fingerprint(result.ambiguous, ax)
-    }
-
-    /// Links fingerprinted windows whose report now shows exactly their fingerprint rect.
-    /// A fingerprinted window that the user moved away is matched normally again.
-    private func resolveFingerprints(_ candidates: inout [AXWindowInfo],
-                                     _ available: inout [ReportedWindowKey: CGRect]) -> [WindowID: ReportedWindowKey] {
-        var out: [WindowID: ReportedWindowKey] = [:]
-        for (id, rect) in pendingFingerprints.sorted(by: { $0.key < $1.key }) {
-            guard let w = candidates.first(where: { $0.id == id }), w.frame.isWithin(Self.exactTolerance, of: rect) else {
-                pendingFingerprints[id] = nil
-                continue
-            }
-            let exact = available.filter { $0.value.isWithin(Self.exactTolerance, of: rect) }.map(\.key)
-            guard exact.count == 1 else { continue }   // keep waiting for the next report
-            out[id] = exact[0]
-            available[exact[0]] = nil
-            candidates.removeAll { $0.id == id }
-        }
-        return out
     }
 
     /// Moves ambiguous windows (plus any still waiting) to unique heights so the next report tells them apart.
@@ -331,7 +313,7 @@ public struct BarModel: Equatable, Sendable {
     /// Never touches minimized or full-screen windows; skips windows already in place.
     private func move(_ id: WindowID, to rect: CGRect, _ ax: [WindowID: AXWindowInfo]) {
         guard let w = ax[id], isSnappable(w) else { return }
-        if w.frame.isWithin(Self.exactTolerance, of: rect) { return }
+        if w.frame.isWithin(Self.inPlaceTolerance, of: rect) { return }
         ownMoves[id] = rect
         windows.setFrame(id, rect)
     }

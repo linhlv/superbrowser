@@ -23,6 +23,7 @@ public struct MatchResult: Equatable {
 }
 
 private let matchTolerance: CGFloat = 1
+private let fingerprintStep: CGFloat = 4
 private let minFallbackSize = CGSize(width: 700, height: 500)
 
 private func edgesMatch(_ a: CGRect, _ b: CGRect) -> Bool {
@@ -64,11 +65,14 @@ public func matchWindows(unassigned: [AXWindowInfo], available: [ReportedWindowK
     return result
 }
 
+/// Gives each id the content rect with a unique height (shorter by 4 pt per position), so the next
+/// report tells stacked windows apart. The 4 pt step is well above twice the 1 pt match tolerance,
+/// so a fingerprinted window matches only the report at its own height.
 public func fingerprintFrames(_ ids: [WindowID], content: CGRect) -> [WindowID: CGRect] {
     var out: [WindowID: CGRect] = [:]
     for (i, id) in ids.enumerated() {
         var f = content
-        f.size.height = content.height - CGFloat(i + 1)
+        f.size.height = content.height - fingerprintStep * CGFloat(i + 1)
         out[id] = f
     }
     return out
