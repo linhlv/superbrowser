@@ -13,7 +13,24 @@ public struct Settings: Codable, Equatable, Sendable {
     public var hotkeyModifier: HotkeyModifier = .control
     public var launchAtLogin = false
     public var setupDone = false
+    /// Profiles whose helper extension has reported at least once.
+    public var linkedProfiles: Set<String> = []
     public init() {}
+
+    /// Every field is optional on disk, so settings written by an older version still load.
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        let d = Settings()
+        barPosition = try c.decodeIfPresent(BarPosition.self, forKey: .barPosition) ?? d.barPosition
+        frame = try c.decodeIfPresent(CGRect.self, forKey: .frame) ?? d.frame
+        profileOrder = try c.decodeIfPresent([String].self, forKey: .profileOrder) ?? d.profileOrder
+        hiddenProfiles = try c.decodeIfPresent(Set<String>.self, forKey: .hiddenProfiles) ?? d.hiddenProfiles
+        noExtensionProfiles = try c.decodeIfPresent(Set<String>.self, forKey: .noExtensionProfiles) ?? d.noExtensionProfiles
+        hotkeyModifier = try c.decodeIfPresent(HotkeyModifier.self, forKey: .hotkeyModifier) ?? d.hotkeyModifier
+        launchAtLogin = try c.decodeIfPresent(Bool.self, forKey: .launchAtLogin) ?? d.launchAtLogin
+        setupDone = try c.decodeIfPresent(Bool.self, forKey: .setupDone) ?? d.setupDone
+        linkedProfiles = try c.decodeIfPresent(Set<String>.self, forKey: .linkedProfiles) ?? d.linkedProfiles
+    }
 }
 
 public struct SettingsStore {

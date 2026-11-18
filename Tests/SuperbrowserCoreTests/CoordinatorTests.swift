@@ -345,6 +345,19 @@ struct CoordinatorTests {
         #expect(h.coordinator.barModel.tabs.map(\.isLinked) == [true, false, true])
     }
 
+    @Test func linkedProfilesPersistAcrossRestart() {
+        let h = Harness { _ in }
+        #expect(h.tab("P1")?.isLinked == false)
+        h.coordinator.receive(report("P1", []))
+        #expect(h.store.load().linkedProfiles == ["P1"])
+
+        let restarted = Coordinator(windows: h.ws, launcher: h.launcher, store: h.store,
+                                    profiles: [prof("P1"), prof("P2"), prof("P3")], screens: [screen])
+        #expect(restarted.barModel.tabs.map(\.isLinked) == [true, false, false])
+        restarted.linkUnlinkedProfiles()
+        #expect(h.launcher.claimed == ["P2", "P3"])
+    }
+
     @Test func staleReportDoesNotClaimWindowAfterChromeRestart() {
         let h = Harness { $0.add(1, A) }
         h.coordinator.receive(report("P1", [(10, A)]))

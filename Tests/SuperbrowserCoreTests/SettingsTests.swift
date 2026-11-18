@@ -58,6 +58,7 @@ import Foundation
         s.hotkeyModifier = .controlOption
         s.launchAtLogin = true
         s.setupDone = true
+        s.linkedProfiles = ["A", "B"]
         try store.save(s)
         #expect(store.load() == s)
     }
@@ -69,5 +70,28 @@ import Foundation
         let url = dir.appendingPathComponent("settings.json")
         try Data("{oops".utf8).write(to: url)
         #expect(SettingsStore(url: url).load() == Settings())
+    }
+
+    @Test func oldSettingsJsonMissingFieldsDecodes() throws {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let url = dir.appendingPathComponent("settings.json")
+        // Written by an older version: no linkedProfiles, no launchAtLogin, no setupDone.
+        try Data(#"{"barPosition":"left","frame":[[10,20],[800,600]],"profileOrder":["B","A"],"hiddenProfiles":[],"noExtensionProfiles":["Y"],"hotkeyModifier":"controlOption"}"#.utf8).write(to: url)
+        let s = SettingsStore(url: url).load()
+        #expect(s.barPosition == .left)
+        #expect(s.frame == CGRect(x: 10, y: 20, width: 800, height: 600))
+        #expect(s.profileOrder == ["B", "A"])
+        #expect(s.noExtensionProfiles == ["Y"])
+        #expect(s.hotkeyModifier == .controlOption)
+        #expect(s.launchAtLogin == false)
+        #expect(s.setupDone == false)
+        #expect(s.linkedProfiles.isEmpty)
+    }
+
+    @Test func emptySettingsJsonDecodesDefaults() throws {
+        let s = try JSONDecoder().decode(Settings.self, from: Data("{}".utf8))
+        #expect(s == Settings())
     }
 }

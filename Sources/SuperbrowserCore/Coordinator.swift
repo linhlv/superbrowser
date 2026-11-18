@@ -58,8 +58,6 @@ public struct BarModel: Equatable, Sendable {
 
     /// Latest report per profile dir (kept for every dir; unknown/hidden ones are filtered on use).
     private var reports: [String: ExtensionReport] = [:]
-    /// Profiles that ever reported (for `isLinked`; survives clearing `reports` when Chrome quits).
-    private var everReported: Set<String> = []
     /// Reported windows whose assigned AX window vanished; not matchable until their profile reports again.
     private var deadKeys: Set<ReportedWindowKey> = []
     /// Windows linked to a reported Chrome window of a managed profile.
@@ -106,7 +104,8 @@ public struct BarModel: Equatable, Sendable {
 
     public func receive(_ report: ExtensionReport) {
         reports[report.profileDir] = report
-        everReported.insert(report.profileDir)
+        // A profile stays linked once it has reported (persisted, so it survives restarts and Chrome quitting).
+        if settings.linkedProfiles.insert(report.profileDir).inserted { persist() }
         // A newer report is the truth for its profile: a key it still lists is alive again.
         deadKeys = deadKeys.filter { $0.profileDir != report.profileDir }
         sync()
@@ -255,7 +254,7 @@ public struct BarModel: Equatable, Sendable {
     private func isManaged(_ id: WindowID) -> Bool { owner(of: id) != nil }
 
     private func isLinked(_ dir: String) -> Bool {
-        everReported.contains(dir) || settings.noExtensionProfiles.contains(dir)
+        settings.linkedProfiles.contains(dir) || settings.noExtensionProfiles.contains(dir)
     }
 
     private func reportedWindow(_ key: ReportedWindowKey) -> ReportedWindow? {
