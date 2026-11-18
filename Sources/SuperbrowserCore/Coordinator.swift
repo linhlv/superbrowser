@@ -360,14 +360,15 @@ public struct BarModel: Equatable, Sendable {
         fingerprint(result.ambiguous, ax)
     }
 
-    /// Moves newly ambiguous windows to unique heights so the next report tells them apart.
+    /// Gives newly ambiguous windows unique heights in place so the next report tells them apart.
     /// Windows already waiting are never moved again (a report about them may be in flight),
     /// and their heights are not reused.
     private func fingerprint(_ ambiguous: [WindowID], _ ax: [WindowID: AXWindowInfo]) {
-        let fresh = ambiguous.filter { pendingFingerprints[$0] == nil }
+        let fresh = ambiguous.filter { pendingFingerprints[$0] == nil }.compactMap { id in
+            ax[id].map { (id: id, frame: $0.frame) }
+        }
         guard !fresh.isEmpty else { return }
-        let inUse = Set(pendingFingerprints.values.map(\.height))
-        for (id, rect) in fingerprintFrames(fresh, content: content, excludingHeights: inUse) {
+        for (id, rect) in fingerprintFrames(fresh, inUse: Array(pendingFingerprints.values)) {
             fallbackOwned[id] = nil
             pendingFingerprints[id] = rect
             move(id, to: rect, ax)

@@ -66,23 +66,28 @@ public func matchWindows(unassigned: [AXWindowInfo], available: [ReportedWindowK
     return result
 }
 
-/// Gives each id the content rect with a unique height (content height minus 4, 8, 12, … pt), so the
-/// next report tells stacked windows apart. The 4 pt step is well above twice the 1 pt match tolerance,
-/// so a fingerprinted window matches only the report at its own height. Heights closer than one step
-/// to any of `excludingHeights` (fingerprints still in use) are skipped.
-public func fingerprintFrames(_ ids: [WindowID], content: CGRect,
-                              excludingHeights inUse: Set<CGFloat> = []) -> [WindowID: CGRect] {
+/// Gives each window a unique height in place: same origin and width, height lowered by 4, 8, 12, … pt,
+/// so the next report tells stacked windows apart without moving them into the frame. The 4 pt step is
+/// well above twice the 1 pt match tolerance, so a fingerprinted window matches only the report at its own
+/// height. A height is skipped if it is closer than one step to a rect in `inUse` (fingerprints still
+/// waiting) or already given out here, at the same origin and width (within twice the match tolerance).
+public func fingerprintFrames(_ windows: [(id: WindowID, frame: CGRect)], inUse: [CGRect] = []) -> [WindowID: CGRect] {
+    let samePlace = 2 * matchTolerance
+    func collides(_ a: CGRect, _ b: CGRect) -> Bool {
+        abs(a.minX - b.minX) <= samePlace && abs(a.minY - b.minY) <= samePlace
+            && abs(a.width - b.width) <= samePlace && abs(a.maxY - b.maxY) < fingerprintStep
+    }
+    var taken = inUse
     var out: [WindowID: CGRect] = [:]
-    var step: CGFloat = 0
-    for id in ids {
-        var height: CGFloat
+    for (id, frame) in windows {
+        var f = frame
+        var step: CGFloat = 0
         repeat {
             step += 1
-            height = content.height - fingerprintStep * step
-        } while inUse.contains { abs($0 - height) < fingerprintStep }
-        var f = content
-        f.size.height = height
+            f.size.height = frame.height - fingerprintStep * step
+        } while taken.contains { collides($0, f) }
         out[id] = f
+        taken.append(f)
     }
     return out
 }

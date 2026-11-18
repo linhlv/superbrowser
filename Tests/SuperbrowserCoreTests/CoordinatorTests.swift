@@ -125,6 +125,21 @@ struct CoordinatorTests {
         #expect(h.tab("P2")?.windowCount == 1)
     }
 
+    @Test func ambiguousWindowsAreFingerprintedInPlace() {
+        let h = Harness { $0.add(1, A); $0.add(2, A) }
+        h.coordinator.receive(report("P1", [(10, A)]))
+        h.coordinator.receive(report("P2", [(20, A)]))
+        #expect(h.ws.didSet(1, withHeight(A, 696)))
+        #expect(h.ws.didSet(2, withHeight(A, 692)))
+        #expect(!h.ws.didSet(1, withHeight(C, 839)) && !h.ws.didSet(2, withHeight(C, 835)))
+
+        h.coordinator.receive(report("P1", [(10, withHeight(A, 696))]))
+        h.coordinator.receive(report("P2", [(20, withHeight(A, 692))]))
+        #expect(h.coordinator.owner(of: 1) == "P1")
+        #expect(h.coordinator.owner(of: 2) == "P2")
+        #expect(h.ws.didSet(1, C) && h.ws.didSet(2, C))
+    }
+
     @Test func ownMoveIgnored() {
         let h = Harness { $0.add(1, A); $0.add(2, B) }
         h.coordinator.receive(report("P1", [(10, A)]))
