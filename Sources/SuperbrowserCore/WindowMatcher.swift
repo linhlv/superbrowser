@@ -58,7 +58,8 @@ public func matchWindows(unassigned: [AXWindowInfo], available: [ReportedWindowK
     result.ambiguous = ambiguous.sorted()
 
     if let profile = fallbackProfile, Set(result.assigned.values) == Set(available.keys) {
-        for w in unmatched where w.frame.width >= minFallbackSize.width && w.frame.height >= minFallbackSize.height {
+        for w in unmatched where w.frame.width >= minFallbackSize.width && w.frame.height >= minFallbackSize.height
+            && !w.title.hasPrefix("DevTools") {
             result.fallback[w.id] = profile
         }
     }

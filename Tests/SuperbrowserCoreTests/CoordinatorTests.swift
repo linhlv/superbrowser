@@ -11,8 +11,8 @@ final class FakeWindowSystem: WindowSystem {
     var setFrameCalls: [(id: WindowID, rect: CGRect)] = []
     var raised: [WindowID] = []
 
-    func add(_ id: WindowID, _ rect: CGRect, minimized: Bool = false, fullScreen: Bool = false) {
-        windows[id] = AXWindowInfo(id: id, frame: rect, title: "w\(id)", isMinimized: minimized, isFullScreen: fullScreen)
+    func add(_ id: WindowID, _ rect: CGRect, minimized: Bool = false, fullScreen: Bool = false, title: String? = nil) {
+        windows[id] = AXWindowInfo(id: id, frame: rect, title: title ?? "w\(id)", isMinimized: minimized, isFullScreen: fullScreen)
     }
 
     func chromeWindows() -> [AXWindowInfo] { windows.values.sorted { $0.id < $1.id } }
@@ -299,17 +299,69 @@ struct CoordinatorTests {
 
     @Test func fallbackProfileAdoptsUnmatchedWindow() {
         let h = Harness(profiles: [prof("P1"), prof("Profile 29")],
-                        configure: { $0.noExtensionProfiles = ["Profile 29"] }) {
-            $0.add(1, A)
-            $0.add(2, CGRect(x: 300, y: 200, width: 1000, height: 700))
-        }
-        h.coordinator.windowsChanged()
+                        configure: { $0.noExtensionProfiles = ["Profile 29"] }) { $0.add(1, A) }
         h.coordinator.receive(report("P1", [(10, A)]))
+        h.clock.advance(1)
+        h.coordinator.activate(profileDir: "Profile 29")
+        #expect(h.launcher.opened == ["Profile 29"])
+
+        h.clock.advance(2)                               // the window Superbrowser asked for opens
+        h.ws.add(2, CGRect(x: 300, y: 200, width: 1000, height: 700))
+        h.coordinator.windowsChanged()
         #expect(h.ws.didSet(1, C))
         #expect(h.ws.didSet(2, C))
         #expect(h.coordinator.owner(of: 2) == "Profile 29")
         #expect(h.tab("Profile 29")?.windowCount == 1)
         #expect(h.tab("Profile 29")?.isLinked == true)
+    }
+
+    @Test func fallbackIgnoresWindowsNotOpenedBySuperbrowser() {
+        let other = CGRect(x: 300, y: 200, width: 1000, height: 700)
+        let h = Harness(profiles: [prof("P1"), prof("Profile 29")],
+                        configure: { $0.noExtensionProfiles = ["Profile 29"] }) { $0.add(1, A); $0.add(2, other) }
+        h.coordinator.receive(report("P1", [(10, A)]))
+        #expect(h.coordinator.owner(of: 2) == nil)      // e.g. an installed web app, open before any launch
+
+        h.clock.advance(1)
+        h.coordinator.activate(profileDir: "Profile 29")
+        h.clock.advance(1)
+        h.coordinator.windowsChanged()
+        #expect(h.coordinator.owner(of: 2) == nil)      // was there before the launch
+
+        h.clock.advance(10)                              // appears more than 10 s after the launch
+        h.ws.add(3, other)
+        h.coordinator.windowsChanged()
+        #expect(h.coordinator.owner(of: 3) == nil)
+        #expect(!h.ws.setFrameCalls.contains { $0.id == 2 || $0.id == 3 })
+    }
+
+    @Test func fallbackIgnoresDevTools() {
+        let h = Harness(profiles: [prof("P1"), prof("Profile 29")],
+                        configure: { $0.noExtensionProfiles = ["Profile 29"] }) { $0.add(1, A) }
+        h.coordinator.receive(report("P1", [(10, A)]))
+        h.clock.advance(1)
+        h.coordinator.activate(profileDir: "Profile 29")
+        h.clock.advance(1)
+        h.ws.add(2, CGRect(x: 300, y: 200, width: 1000, height: 700), title: "DevTools - example.com/")
+        h.coordinator.windowsChanged()
+        #expect(h.coordinator.owner(of: 2) == nil)
+        #expect(!h.ws.setFrameCalls.contains { $0.id == 2 })
+    }
+
+    @Test func fallbackWaitsWhileAnotherProfileIsUnlinked() {
+        // P2's extension has never reported: its windows look exactly like fallback windows.
+        let h = Harness(profiles: [prof("P1"), prof("P2"), prof("Profile 29")],
+                        configure: { $0.noExtensionProfiles = ["Profile 29"] }) { $0.add(1, A) }
+        h.coordinator.receive(report("P1", [(10, A)]))
+        h.clock.advance(1)
+        h.coordinator.activate(profileDir: "Profile 29")
+        h.clock.advance(1)
+        h.ws.add(2, CGRect(x: 300, y: 200, width: 1000, height: 700))
+        h.coordinator.windowsChanged()
+        #expect(h.coordinator.owner(of: 2) == nil)
+
+        h.coordinator.receive(report("P2", []))         // every other profile is linked now
+        #expect(h.coordinator.owner(of: 2) == "Profile 29")
     }
 
     @Test func updateProfilesRefreshesBar() {

@@ -9,8 +9,8 @@ private let p1 = ReportedWindowKey(profileDir: "P1", chromeId: 10)
 private let p2 = ReportedWindowKey(profileDir: "P2", chromeId: 20)
 private let p3 = ReportedWindowKey(profileDir: "P3", chromeId: 30)
 
-private func ax(_ id: Int, _ f: CGRect, min: Bool = false, fs: Bool = false) -> AXWindowInfo {
-    AXWindowInfo(id: id, frame: f, title: "", isMinimized: min, isFullScreen: fs)
+private func ax(_ id: Int, _ f: CGRect, min: Bool = false, fs: Bool = false, title: String = "") -> AXWindowInfo {
+    AXWindowInfo(id: id, frame: f, title: title, isMinimized: min, isFullScreen: fs)
 }
 
 @Test func uniqueBoundsAssigned() {
@@ -53,6 +53,12 @@ private func ax(_ id: Int, _ f: CGRect, min: Bool = false, fs: Bool = false) -> 
 @Test func smallUnmatchedWindowNotAdopted() {
     let r = matchWindows(unassigned: [ax(1, CGRect(x: 0, y: 0, width: 500, height: 600))], available: [:], fallbackProfile: "Profile 29")
     #expect(r.fallback.isEmpty)
+}
+
+@Test func devToolsWindowNotAdopted() {
+    let r = matchWindows(unassigned: [ax(1, B, title: "DevTools - example.com/"), ax(2, C, title: "Inbox")],
+                         available: [:], fallbackProfile: "Profile 29")
+    #expect(r.fallback == [2: "Profile 29"])
 }
 
 @Test func fingerprintHeightsUnique() {

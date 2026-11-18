@@ -73,11 +73,17 @@ public struct BarModel: Equatable, Sendable {
     private var mru: [WindowID] = []
     private var front: WindowID?
     private var chromeActive = true
+    /// When each current window was first seen (for the fallback's adoption window).
+    private var firstSeen: [WindowID: Date] = [:]
+    /// When Superbrowser last opened or raised a window of the fallback profile.
+    private var fallbackLaunchedAt: Date?
     /// The last time a user move was corrected to keep the bar on screen.
     private var lastCorrection: (id: WindowID, at: Date)?
 
     private static let ownMoveTolerance: CGFloat = 2
     private static let correctionGuard: TimeInterval = 1
+    /// The fallback profile adopts only windows that appear this soon after Superbrowser launched it.
+    private static let fallbackAdoptionWindow: TimeInterval = 10
     private static let inPlaceTolerance: CGFloat = 0.5
     private static let inactiveStates: Set<String> = ["minimized", "fullscreen", "locked-fullscreen"]
 
@@ -172,8 +178,9 @@ public struct BarModel: Equatable, Sendable {
                              front: chromeActive ? front : nil) {
         case .raise(let id): windows.raise(id)
         case .openNewWindow(let dir): launcher.openWindow(profileDir: dir)
-        case .none: break
+        case .none: return
         }
+        if profileDir == fallbackProfile { fallbackLaunchedAt = now() }
     }
 
     /// Opens the claim page for visible profiles that never reported and don't use the fallback.
@@ -251,6 +258,22 @@ public struct BarModel: Equatable, Sendable {
         return dir
     }
 
+    /// The fallback profile, while it may adopt windows: some profile has reported, and every other
+    /// visible profile is linked (an unlinked profile's windows would look just like the fallback's).
+    private var adoptingFallbackProfile: String? {
+        guard !reports.isEmpty, let dir = fallbackProfile,
+              managedDirs.subtracting([dir]).isSubset(of: settings.linkedProfiles) else { return nil }
+        return dir
+    }
+
+    /// Whether a window first appeared within the adoption window after Superbrowser launched the
+    /// fallback profile (so DevTools, web apps, incognito or picker windows opened otherwise are left alone).
+    private func appearedAfterFallbackLaunch(_ id: WindowID) -> Bool {
+        guard let launched = fallbackLaunchedAt, let seen = firstSeen[id] else { return false }
+        let delay = seen.timeIntervalSince(launched)
+        return delay >= 0 && delay <= Self.fallbackAdoptionWindow
+    }
+
     private func isManaged(_ id: WindowID) -> Bool { owner(of: id) != nil }
 
     private func isLinked(_ dir: String) -> Bool {
@@ -276,6 +299,8 @@ public struct BarModel: Equatable, Sendable {
 
     private func sync() {
         let ax = currentWindows()
+        let t = now()
+        for id in ax.keys where firstSeen[id] == nil { firstSeen[id] = t }
         dropVanished(ax)
         adoptNewWindows(ax)
         refreshBar()
@@ -296,6 +321,7 @@ public struct BarModel: Equatable, Sendable {
             ax[id].map { $0.frame.isWithin(Self.inPlaceTolerance, of: rect) } ?? false
         }
         ownMoves = ownMoves.filter { ax[$0.key] != nil }
+        firstSeen = firstSeen.filter { ax[$0.key] != nil }
         mru.removeAll { ax[$0] == nil }
         if let f = front, ax[f] == nil { front = nil }
     }
@@ -305,8 +331,7 @@ public struct BarModel: Equatable, Sendable {
         let available = matchableReportedBounds().filter { !linked.contains($0.key) }
         // Fallback-owned windows stay candidates, so a later report match takes them over.
         let candidates = ax.values.filter { assigned[$0.id] == nil }.sorted { $0.id < $1.id }
-        let result = matchWindows(unassigned: candidates, available: available,
-                                  fallbackProfile: reports.isEmpty ? nil : fallbackProfile)
+        let result = matchWindows(unassigned: candidates, available: available, fallbackProfile: adoptingFallbackProfile)
 
         let dirs = managedDirs
         for (id, key) in result.assigned.sorted(by: { $0.key < $1.key }) {
@@ -316,7 +341,8 @@ public struct BarModel: Equatable, Sendable {
             assigned[id] = key
             snap(id, ax)
         }
-        for (id, dir) in result.fallback.sorted(by: { $0.key < $1.key }) where fallbackOwned[id] == nil {
+        for (id, dir) in result.fallback.sorted(by: { $0.key < $1.key })
+        where fallbackOwned[id] == nil && appearedAfterFallbackLaunch(id) {
             pendingFingerprints[id] = nil
             fallbackOwned[id] = dir
             snap(id, ax)
