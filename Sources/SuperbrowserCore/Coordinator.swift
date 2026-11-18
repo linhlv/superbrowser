@@ -72,6 +72,7 @@ public struct BarModel: Equatable, Sendable {
     /// Most-recently-front first.
     private var mru: [WindowID] = []
     private var front: WindowID?
+    private var chromeActive = true
 
     private static let ownMoveTolerance: CGFloat = 2
     private static let inPlaceTolerance: CGFloat = 0.5
@@ -136,6 +137,12 @@ public struct BarModel: Equatable, Sendable {
         refreshBar()
     }
 
+    /// Chrome became (in)active. While it isn't, its front window isn't in front of the user, so a
+    /// shortcut raises the profile's most recent window instead of cycling past it.
+    public func chromeActiveChanged(_ active: Bool) {
+        chromeActive = active
+    }
+
     public func activate(slot: Int) {
         guard let p = profile(forSlot: slot, in: visibleProfiles(profiles, settings: settings)) else { return }
         activate(profileDir: p.dir)
@@ -143,7 +150,8 @@ public struct BarModel: Equatable, Sendable {
 
     public func activate(profileDir: String) {
         guard managedDirs.contains(profileDir) else { return }
-        switch switchAction(profileDir: profileDir, windows: windowsByRecency(of: profileDir), front: front) {
+        switch switchAction(profileDir: profileDir, windows: windowsByRecency(of: profileDir),
+                             front: chromeActive ? front : nil) {
         case .raise(let id): windows.raise(id)
         case .openNewWindow(let dir): launcher.openWindow(profileDir: dir)
         case .none: break

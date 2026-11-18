@@ -46,10 +46,12 @@ import SuperbrowserCore
         chrome.onChromeTerminated = { [weak coordinator] in coordinator?.chromeTerminated() }
         chrome.onChromeActiveChanged = { [weak self] active in
             guard let self else { return }
+            self.coordinator.chromeActiveChanged(active)
             self.bar.setChromeActive(active)
             if active { self.refreshProfiles() }
         }
         chrome.start()
+        coordinator.chromeActiveChanged(chrome.isChromeActive)
         bar.setChromeActive(chrome.isChromeActive)
         coordinator.windowsChanged()
         bar.apply(coordinator.barModel)

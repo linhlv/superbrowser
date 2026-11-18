@@ -166,6 +166,31 @@ struct CoordinatorTests {
         #expect(h.ws.raised == [3])
     }
 
+    @Test func inactiveChromeRaisesFrontProfileWindow() {
+        // From another app, the shortcut of the profile whose window Chrome has in front brings it back.
+        let h = Harness { $0.add(1, A) }
+        h.coordinator.receive(report("P1", [(10, A)]))
+        h.coordinator.frontWindowChanged(1)
+        h.coordinator.chromeActiveChanged(false)
+        h.coordinator.activate(profileDir: "P1")
+        #expect(h.ws.raised == [1])
+    }
+
+    @Test func inactiveChromeRaisesMostRecentNotNext() {
+        let h = Harness { $0.add(1, A); $0.add(3, B) }
+        h.coordinator.receive(report("P1", [(10, A), (30, B)]))
+        h.coordinator.frontWindowChanged(3)
+        h.coordinator.frontWindowChanged(1)
+        h.coordinator.chromeActiveChanged(false)
+        h.coordinator.activate(profileDir: "P1")
+        #expect(h.ws.raised == [1])
+
+        // Back in Chrome, the same shortcut cycles again.
+        h.coordinator.chromeActiveChanged(true)
+        h.coordinator.activate(profileDir: "P1")
+        #expect(h.ws.raised == [1, 3])
+    }
+
     @Test func activateEmptySlotDoesNothing() {
         let h = Harness(profiles: [prof("P1"), prof("P2")]) { _ in }
         h.coordinator.activate(slot: 9)
