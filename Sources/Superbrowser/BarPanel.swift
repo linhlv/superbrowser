@@ -52,13 +52,12 @@ import SuperbrowserCore
         case .right: (0, 0, 8 + s, 8)
         }
         NSLayoutConstraint.activate([
-            row.topAnchor.constraint(greaterThanOrEqualTo: topAnchor, constant: inset.top),
-            row.bottomAnchor.constraint(lessThanOrEqualTo: bottomAnchor, constant: -inset.bottom),
             row.leadingAnchor.constraint(equalTo: leadingAnchor, constant: inset.leading),
             row.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -inset.trailing),
-            row.centerYAnchor.constraint(equalTo: centerYAnchor, constant: (inset.top - inset.bottom) / 2),
+            row.centerYAnchor.constraint(equalTo: centerYAnchor, constant: (inset.bottom - inset.top) / 2),
         ])
         alphaValue = tab.windowCount == 0 ? 0.5 : 1
+        toolTip = tab.isLinked ? tab.name : tab.name + "\nHelper extension not linked"
     }
     required init?(coder: NSCoder) { fatalError() }
 
@@ -91,6 +90,8 @@ import SuperbrowserCore
     private let stack = NSStackView()
     private let onSelect: (String) -> Void
     private var model: BarModel?
+    private var pins: [NSLayoutConstraint] = []
+    private var chromeActive = false
 
     init(onSelect: @escaping (String) -> Void) {
         self.onSelect = onSelect
@@ -114,6 +115,7 @@ import SuperbrowserCore
     }
 
     func setChromeActive(_ active: Bool) {
+        chromeActive = active
         panel.level = active ? .floating : .normal
     }
 
@@ -121,14 +123,15 @@ import SuperbrowserCore
         guard model != self.model else { return }
         self.model = model
         let primaryHeight = NSScreen.screens.first?.frame.height ?? model.barRect.maxY
-        panel.setFrame(FrameLayout.cocoaRect(fromAX: model.barRect, primaryScreenHeight: primaryHeight), display: true)
         rebuild(model)
-        panel.orderFrontRegardless()
+        panel.setFrame(FrameLayout.cocoaRect(fromAX: model.barRect, primaryScreenHeight: primaryHeight), display: false)
+        // Reorder only on first show or while Chrome is active; otherwise a covering app also covers the bar.
+        if !panel.isVisible || chromeActive { panel.orderFrontRegardless() }
     }
 
     private func rebuild(_ model: BarModel) {
         stack.arrangedSubviews.forEach { $0.removeFromSuperview() }
-        NSLayoutConstraint.deactivate(stack.constraints)
+        NSLayoutConstraint.deactivate(pins)
         guard let bg = panel.contentView else { return }
         let horizontal = model.position == .top || model.position == .bottom
         stack.orientation = horizontal ? .horizontal : .vertical
@@ -164,6 +167,7 @@ import SuperbrowserCore
             cs += [stack.trailingAnchor.constraint(equalTo: bg.trailingAnchor),
                    stack.bottomAnchor.constraint(lessThanOrEqualTo: bg.bottomAnchor)]
         }
+        pins = cs
         NSLayoutConstraint.activate(cs)
     }
 }
