@@ -1,5 +1,6 @@
 import type { BookmarkNode } from '../shared/types.ts';
 import { isWebUrl } from './address.ts';
+import type { ChromeBookmarks, ChromeNode } from './chromeLibrary.ts';
 
 export type BookmarkTree = { version: 1; nextId: number; nodes: BookmarkNode[] }; // nodes = top level
 export const TOP_LEVEL = 0;
@@ -154,4 +155,43 @@ export function flattenBookmarks(nodes: BookmarkNode[]): { id: number; title: st
   };
   walk(nodes, '');
   return out;
+}
+
+/**
+ * Add-only merge of Chrome's bookmark files. Imported items are appended to the end of their
+ * folder in Chrome order. A URL already anywhere in the tree (or seen earlier in this import) is
+ * skipped and counted, as is a non-web URL. Folders are reused by name path.
+ */
+export function mergeChrome(tree: BookmarkTree, files: ChromeBookmarks[], now: number): { tree: BookmarkTree; added: number; skipped: number } {
+  const work = structuredClone(tree);
+  const seen = new Set(flattenBookmarks(work.nodes).map((b) => b.url));
+  let added = 0;
+  let skipped = 0;
+
+  const folderIn = (list: BookmarkNode[], title: string, addedAt: number): Folder => {
+    const hit = list.find((n): n is Folder => n.kind === 'folder' && n.title === title);
+    if (hit) return hit;
+    const node: Folder = { id: work.nextId++, kind: 'folder', title, added: addedAt, children: [] };
+    list.push(node);
+    return node;
+  };
+  const importInto = (list: BookmarkNode[], items: ChromeNode[]) => {
+    for (const item of items) {
+      if (item.kind === 'folder') {
+        importInto(folderIn(list, item.title, item.added || now).children, item.children);
+      } else if (!isWebUrl(item.url) || seen.has(item.url)) {
+        skipped++;
+      } else {
+        seen.add(item.url);
+        list.push({ id: work.nextId++, kind: 'url', title: item.title || item.url, url: item.url, added: item.added || now });
+        added++;
+      }
+    }
+  };
+  for (const f of files) {
+    importInto(work.nodes, f.bar);
+    if (f.other.length) importInto(folderIn(work.nodes, 'Other Bookmarks', now).children, f.other);
+    if (f.mobile.length) importInto(folderIn(work.nodes, 'Mobile Bookmarks', now).children, f.mobile);
+  }
+  return { tree: work, added, skipped };
 }

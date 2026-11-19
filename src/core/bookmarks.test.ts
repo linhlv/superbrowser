@@ -2,8 +2,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   TOP_LEVEL, emptyTree, decodeTree, findNode, findByUrl, addBookmark, addFolder,
-  renameNode, moveNode, removeNode, folderChoices, flattenBookmarks,
+  renameNode, moveNode, removeNode, folderChoices, flattenBookmarks, mergeChrome,
 } from './bookmarks.ts';
+import type { ChromeBookmarks, ChromeNode } from './chromeLibrary.ts';
 
 const T0 = 1_700_000_000_000;
 function sample() { // Daily(Gmail, Reports(Weekly)), Figma
@@ -119,4 +120,77 @@ test('decodeTree makes titles strings and ids unique across nested folders', () 
   const kid = flattenBookmarks(t.nodes)[0]!;
   assert.notEqual(kid.id, t.nodes[0]!.id);
   assert.ok(t.nextId > kid.id);
+});
+
+const cu = (title: string, url: string): ChromeNode => ({ kind: 'url', title, url, added: 5 });
+const cf = (title: string, ...children: ChromeNode[]): ChromeNode => ({ kind: 'folder', title, added: 5, children });
+const chrome = (p: Partial<ChromeBookmarks>): ChromeBookmarks => ({ bar: [], other: [], mobile: [], ...p });
+const titles = (nodes: { title: string }[]) => nodes.map((n) => n.title);
+
+test('mergeChrome: bar at top level, other/mobile as folders only when non-empty', () => {
+  const r = mergeChrome(emptyTree(), [chrome({ bar: [cu('A', 'https://a.test/')], other: [cu('O', 'https://o.test/')] })], T0);
+  assert.deepEqual(titles(r.tree.nodes), ['A', 'Other Bookmarks']);
+  const other = r.tree.nodes[1];
+  assert.equal(other.kind, 'folder');
+  assert.deepEqual(other.kind === 'folder' && titles(other.children), ['O']);
+  assert.equal(r.added, 2);
+  assert.equal(r.skipped, 0);
+  const m = mergeChrome(emptyTree(), [chrome({ mobile: [cu('M', 'https://m.test/')] })], T0);
+  assert.deepEqual(titles(m.tree.nodes), ['Mobile Bookmarks']);
+  assert.deepEqual(mergeChrome(emptyTree(), [chrome({})], T0).tree.nodes, []);
+});
+
+test('mergeChrome appends in Chrome order and reuses folders by name path', () => {
+  const { t, daily } = sample(); 
+  const r = mergeChrome(t, [chrome({ bar: [
+    cu('Z', 'https://z.test/'),
+    cf('Daily', cu('N1', 'https://n1.test/'), cf('Reports', cu('N2', 'https://n2.test/')), cf('Empty')),
+    cu('Y', 'https://y.test/'),
+  ] })], T0);
+  const before = titles(t.nodes);
+  assert.deepEqual(titles(r.tree.nodes), [...before, 'Z', 'Y']);
+  const d = findNode(r.tree, daily)!.node;
+  assert.equal(d.kind, 'folder');
+  if (d.kind !== 'folder') return;
+  assert.deepEqual(titles(d.children).slice(-2), ['N1', 'Empty']);
+  const reports = d.children.find((c) => c.title === 'Reports')!;
+  assert.deepEqual(reports.kind === 'folder' && titles(reports.children), ['Weekly', 'N2']);
+  assert.equal(r.tree.nodes.filter((n) => n.title === 'Daily').length, 1);
+  const ids = new Set<number>();
+  const walk = (l: typeof t.nodes) => l.forEach((n) => { assert.ok(!ids.has(n.id)); ids.add(n.id); if (n.kind === 'folder') walk(n.children); });
+  walk(r.tree.nodes);
+  assert.equal(r.tree.nextId, Math.max(...ids) + 1);
+});
+
+test('mergeChrome a second time adds nothing', () => {
+  const file = chrome({ bar: [cu('A', 'https://a.test/'), cf('F', cu('B', 'https://b.test/'))], other: [cu('O', 'https://o.test/')] });
+  const once = mergeChrome(emptyTree(), [file], T0);
+  const twice = mergeChrome(once.tree, [file], T0);
+  assert.equal(twice.added, 0);
+  assert.equal(twice.skipped, 3);
+  assert.deepEqual(twice.tree.nodes, once.tree.nodes);
+});
+
+test('mergeChrome skips URLs the user already has anywhere (renamed or moved)', () => {
+  const { t } = sample();
+  const r = mergeChrome(t, [chrome({ bar: [cu('Mail', 'https://mail.google.com/'), cu('Fig', 'https://figma.com/'), cu('New', 'https://new.test/')] })], T0);
+  assert.equal(r.added, 1);
+  assert.equal(r.skipped, 2);
+  assert.equal(flattenBookmarks(r.tree.nodes).filter((b) => b.url === 'https://mail.google.com/').length, 1);
+});
+
+test('mergeChrome merges Bookmarks and AccountBookmarks into one tree', () => {
+  const a = chrome({ bar: [cu('A', 'https://a.test/'), cu('S', 'https://shared.test/')] });
+  const b = chrome({ bar: [cu('B', 'https://b.test/'), cu('S2', 'https://shared.test/')], other: [cu('A again', 'https://a.test/')] });
+  const r = mergeChrome(emptyTree(), [a, b], T0);
+  assert.deepEqual(flattenBookmarks(r.tree.nodes).map((x) => x.url), ['https://a.test/', 'https://shared.test/', 'https://b.test/']);
+  assert.equal(r.added, 3);
+  assert.equal(r.skipped, 2);
+});
+
+test('mergeChrome skips and counts non-web URLs', () => {
+  const r = mergeChrome(emptyTree(), [chrome({ bar: [cu('JS', 'javascript:void 0'), cu('Settings', 'chrome://settings'), cu('OK', 'https://ok.test/'), cf('F', cu('File', 'file:///x'))] })], T0);
+  assert.equal(r.added, 1);
+  assert.equal(r.skipped, 3);
+  assert.deepEqual(titles(r.tree.nodes), ['OK', 'F']);
 });
