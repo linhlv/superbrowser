@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { AppState, Decision } from './appState.ts';
 import {
-  decide, describeRequest, permissionKeys, policyFor, PromptQueue, remember, siteOrigin,
+  decide, describeRequest, permissionKeys, policyFor, PromptQueue, remember, siteOrigin, storeAnswer, verdictFor,
   type PermissionPrompt,
 } from './permissions.ts';
 
@@ -114,6 +114,8 @@ type Pending = { prompt: PermissionPrompt; answer: (d: Decision) => void };
 function harness() {
   const shown: Pending[] = [];
   const stored = new Map<string, Decision>();
+  /** Requests whose page is gone (tab closed or navigated), as `${source}/${navigation}`. */
+  const gone = new Set<string>();
   const keyOf = (p: PermissionPrompt) => `${p.dir}|${p.origin}|${p.keys.join(',')}`;
   const queue = new PromptQueue(
     (prompt) => new Promise<Decision>((resolve) => {
@@ -126,12 +128,16 @@ function harness() {
       });
     }),
     (prompt) => stored.get(keyOf(prompt)) ?? 'ask',
+    (prompt) => !gone.has(`${prompt.source}/${prompt.navigation}`),
   );
-  return { queue, shown, stored };
+  return { queue, shown, stored, gone };
 }
 
 const flush = () => new Promise<void>((r) => setImmediate(r));
-const p = (origin: string, keys = ['notifications'], dir = 'Default'): PermissionPrompt => ({ dir, origin, keys });
+let nextSource = 1;
+/** A request; each comes from its own tab unless `source` is given. */
+const p = (origin: string, keys = ['notifications'], dir = 'Default', source = nextSource++, navigation = 0): PermissionPrompt =>
+  ({ dir, origin, keys, source, navigation });
 
 test('PromptQueue: one sheet at a time, in order', async () => {
   const { queue, shown } = harness();
@@ -197,7 +203,127 @@ test('PromptQueue: a failing sheet denies and the queue goes on', async () => {
     calls++;
     if (calls === 1) throw new Error('window gone');
     return 'allow';
-  }, () => 'ask');
+  }, () => 'ask', () => true);
   assert.equal(await queue.request(p('https://a.test')), 'deny');
   assert.equal(await queue.request(p('https://b.test')), 'allow');
+});
+
+test('PromptQueue: a waiting request whose tab closed or navigated is refused without a sheet', async () => {
+  const { queue, shown, gone } = harness();
+  const a = queue.request(p('https://a.test'));
+  const closed = queue.request(p('https://b.test', ['notifications'], 'Default', 50, 0));
+  const navigated = queue.request(p('https://c.test', ['geolocation'], 'Default', 51, 3));
+  const kept = queue.request(p('https://d.test'));
+  await flush();
+  gone.add('50/0');
+  gone.add('51/3');
+  shown[0]?.answer('allow');
+  assert.equal(await a, 'allow');
+  assert.equal(await closed, 'deny');
+  assert.equal(await navigated, 'deny');
+  await flush();
+  assert.deepEqual(shown.map((s) => s.prompt.origin), ['https://a.test', 'https://d.test']);
+  shown[1]?.answer('allow');
+  assert.equal(await kept, 'allow');
+});
+
+test('PromptQueue: a gone request does not cancel an identical one from a live tab', async () => {
+  const { queue, shown, gone } = harness();
+  void queue.request(p('https://a.test'));
+  const dead = queue.request(p(MEET, AV, 'Default', 60));
+  const live = queue.request(p(MEET, AV, 'Default', 61));
+  await flush();
+  gone.add('60/0');
+  shown[0]?.answer('allow');
+  await flush();
+  assert.equal(shown.length, 2);
+  assert.equal(shown[1]?.prompt.source, 61);
+  shown[1]?.answer('allow');
+  assert.equal(await dead, 'deny');
+  assert.equal(await live, 'allow');
+});
+
+test('PromptQueue: one waiting request per tab, others refused at once', async () => {
+  const { queue, shown } = harness();
+  const first = queue.request(p('https://a.test', ['geolocation'], 'Default', 70));
+  const sameAgain = queue.request(p('https://a.test', ['geolocation'], 'Default', 70)); // joins, no new sheet
+  const extras = [
+    queue.request(p('https://a.test', ['notifications'], 'Default', 70)),
+    queue.request(p('https://x.a.test', AV, 'Default', 70)),
+    queue.request(p('https://y.a.test', ['geolocation'], 'Default', 70)),
+  ];
+  assert.deepEqual(await Promise.all(extras), ['deny', 'deny', 'deny']);
+  const otherTab = queue.request(p('https://b.test', ['geolocation'], 'Default', 71));
+  await flush();
+  assert.equal(shown.length, 1);
+  shown[0]?.answer('allow');
+  assert.deepEqual(await Promise.all([first, sameAgain]), ['allow', 'allow']);
+  await flush();
+  shown[1]?.answer('deny');
+  assert.equal(await otherTab, 'deny');
+  // Its turn is over: the tab may ask again.
+  const later = queue.request(p('https://a.test', ['notifications'], 'Default', 70));
+  await flush();
+  assert.equal(shown.length, 3);
+  shown[2]?.answer('allow');
+  assert.equal(await later, 'allow');
+});
+
+test('PromptQueue: a throwing check refuses that request and the queue goes on', async () => {
+  let checks = 0;
+  const queue = new PromptQueue(async () => 'allow', () => 'ask', () => {
+    checks++;
+    if (checks === 1) throw new Error('boom');
+    return true;
+  });
+  assert.equal(await queue.request(p('https://a.test')), 'deny');
+  assert.equal(await queue.request(p('https://b.test')), 'allow');
+});
+
+// --- where answers go, what is decided without asking ----------------------------------------------------
+
+test('storeAnswer: only a remembered Allow is saved', () => {
+  const empty = { saved: {}, run: {} };
+  assert.deepEqual(storeAnswer(empty, 'Default', MEET, AV, 'allow', true), {
+    saved: { Default: { [MEET]: { 'media:video': 'allow', 'media:audio': 'allow' } } },
+    run: {},
+  });
+  assert.deepEqual(storeAnswer(empty, 'Default', MEET, AV, 'deny', true), {
+    saved: {},
+    run: { Default: { [MEET]: { 'media:video': 'deny', 'media:audio': 'deny' } } },
+  });
+  assert.deepEqual(storeAnswer(empty, 'Default', MEET, ['notifications'], 'allow', false), {
+    saved: {},
+    run: { Default: { [MEET]: { notifications: 'allow' } } },
+  });
+  assert.deepEqual(storeAnswer(empty, 'Default', MEET, ['notifications'], 'deny', false), {
+    saved: {},
+    run: { Default: { [MEET]: { notifications: 'deny' } } },
+  });
+});
+
+test('storeAnswer: leaves its inputs untouched', () => {
+  const stores = { saved: { Default: { [MEET]: { geolocation: 'allow' as Decision } } }, run: {} };
+  const before = structuredClone(stores);
+  storeAnswer(stores, 'Default', MEET, ['notifications'], 'allow', true);
+  storeAnswer(stores, 'Default', MEET, ['notifications'], 'deny', true);
+  assert.deepEqual(stores, before);
+});
+
+test('verdictFor: saved Allow, then this run', () => {
+  const allowAV = { Default: { [MEET]: { 'media:video': 'allow' as Decision, 'media:audio': 'allow' as Decision } } };
+  const denyAV = { Default: { [MEET]: { 'media:video': 'deny' as Decision, 'media:audio': 'deny' as Decision } } };
+  assert.equal(verdictFor({}, {}, 'Default', MEET, AV), 'ask');
+  assert.equal(verdictFor(allowAV, {}, 'Default', MEET, AV), 'allow');
+  assert.equal(verdictFor({}, allowAV, 'Default', MEET, AV), 'allow');
+  assert.equal(verdictFor({}, denyAV, 'Default', MEET, AV), 'deny');
+  assert.equal(verdictFor(allowAV, {}, 'Profile 1', MEET, AV), 'ask');
+});
+
+test('verdictFor: a saved deny from an earlier version counts as not stored', () => {
+  const denyAV = { Default: { [MEET]: { 'media:video': 'deny' as Decision, 'media:audio': 'deny' as Decision } } };
+  const mixed = { Default: { [MEET]: { 'media:video': 'allow' as Decision, 'media:audio': 'deny' as Decision } } };
+  assert.equal(verdictFor(denyAV, {}, 'Default', MEET, AV), 'ask');
+  assert.equal(verdictFor(mixed, {}, 'Default', MEET, AV), 'ask');
+  assert.equal(verdictFor(mixed, {}, 'Default', MEET, ['media:video']), 'allow');
 });

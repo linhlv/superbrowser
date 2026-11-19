@@ -79,53 +79,103 @@ export function siteOrigin(url: string | undefined): string | null {
   }
 }
 
-export type PermissionPrompt = { dir: string; origin: string; keys: string[] };
-
-type Entry = { id: string; prompt: PermissionPrompt; waiters: ((d: Decision) => void)[] };
+type Permissions = AppState['permissions'];
 
 /**
- * Shows permission sheets one at a time. A request identical to one already waiting or showing
- * (same profile, origin and keys) gets that sheet's answer instead of a second sheet; a queued request
- * is checked again (`current`) before its turn, as an earlier sheet may have answered it.
- * `ask` shows the sheet and stores the answer; if it fails, the request is denied.
+ * What is decided without asking. Saved decisions only ever allow: a saved 'deny' (written by earlier
+ * versions) counts as not stored, so a stray Return on a sheet never blocks a site for good.
+ * Then this run's answers, which do deny.
+ */
+export function verdictFor(saved: Permissions, run: Permissions, dir: string, origin: string, keys: string[]): Verdict {
+  if (decide(saved[dir], origin, keys, 'ask') === 'allow') return 'allow';
+  return decide(run[dir], origin, keys, 'ask');
+}
+
+/**
+ * Where a sheet's answer goes: Allow with "Remember for this site" is saved; Block (remembered or not)
+ * and an Allow for this time only last for this run. Inputs are left untouched.
+ */
+export function storeAnswer(
+  stores: { saved: Permissions; run: Permissions },
+  dir: string, origin: string, keys: string[], d: Decision, rememberChecked: boolean,
+): { saved: Permissions; run: Permissions } {
+  if (d === 'allow' && rememberChecked) return { saved: remember(stores.saved, dir, origin, keys, d), run: stores.run };
+  return { saved: stores.saved, run: remember(stores.run, dir, origin, keys, d) };
+}
+
+/**
+ * One permission request. `source` is the requesting tab (its web contents id); `navigation` counts
+ * that tab's page loads when it asked, so a request from a page that has since gone is dropped.
+ */
+export type PermissionPrompt = { dir: string; origin: string; keys: string[]; source: number; navigation: number };
+
+type Waiter = { prompt: PermissionPrompt; resolve: (d: Decision) => void };
+type Entry = { id: string; waiters: Waiter[] };
+
+/**
+ * Shows permission sheets one at a time, at most one waiting per tab: a tab's further requests are
+ * refused at once (nothing stored), so a page can't chain sheets that lock the window.
+ * A request identical to one already waiting or showing (same profile, origin and keys) gets that
+ * sheet's answer instead of a second sheet. When an entry's turn comes, requests whose page is gone
+ * (`wanted` false: tab closed or navigated) are refused without a sheet, and the rest are checked again
+ * (`current`), as an earlier sheet may have answered them.
+ * `ask` shows the sheet and stores the answer; if anything fails, the request is refused.
  */
 export class PromptQueue {
   private readonly ask: (p: PermissionPrompt) => Promise<Decision>;
   private readonly current: (p: PermissionPrompt) => Verdict;
+  private readonly wanted: (p: PermissionPrompt) => boolean;
   private readonly pending: Entry[] = [];
   private running = false;
 
-  constructor(ask: (p: PermissionPrompt) => Promise<Decision>, current: (p: PermissionPrompt) => Verdict) {
+  constructor(
+    ask: (p: PermissionPrompt) => Promise<Decision>,
+    current: (p: PermissionPrompt) => Verdict,
+    wanted: (p: PermissionPrompt) => boolean,
+  ) {
     this.ask = ask;
     this.current = current;
+    this.wanted = wanted;
   }
 
   request(prompt: PermissionPrompt): Promise<Decision> {
     const id = JSON.stringify([prompt.dir, prompt.origin, [...prompt.keys].sort()]);
     return new Promise((resolve) => {
+      const waiter = { prompt, resolve };
       const same = this.pending.find((e) => e.id === id);
       if (same) {
-        same.waiters.push(resolve);
-        return;
+        same.waiters.push(waiter);
+      } else if (this.pending.some((e) => e.waiters.some((w) => w.prompt.source === prompt.source))) {
+        resolve('deny');
+      } else {
+        this.pending.push({ id, waiters: [waiter] });
+        void this.drain();
       }
-      this.pending.push({ id, prompt, waiters: [resolve] });
-      void this.drain();
     });
   }
 
   private async drain(): Promise<void> {
     if (this.running) return;
     this.running = true;
-    for (let entry = this.pending[0]; entry; entry = this.pending[0]) {
-      let d: Decision;
-      const now = this.current(entry.prompt);
-      if (now !== 'ask') d = now;
-      else {
-        try { d = await this.ask(entry.prompt); } catch { d = 'deny'; }
+    try {
+      for (let entry = this.pending[0]; entry; entry = this.pending[0]) {
+        const gone = new Set<Waiter>();
+        let d: Decision = 'deny';
+        try {
+          for (const w of entry.waiters) if (!this.wanted(w.prompt)) gone.add(w);
+          const live = entry.waiters.find((w) => !gone.has(w));
+          if (live) {
+            const now = this.current(live.prompt);
+            d = now !== 'ask' ? now : await this.ask(live.prompt);
+          }
+        } catch {
+          d = 'deny';
+        }
+        this.pending.shift(); // only now: while its sheet shows, identical requests join it
+        for (const w of entry.waiters) w.resolve(gone.has(w) ? 'deny' : d);
       }
-      this.pending.shift(); // only now: while its sheet shows, identical requests join it
-      for (const resolve of entry.waiters) resolve(d);
+    } finally {
+      this.running = false;
     }
-    this.running = false;
   }
 }

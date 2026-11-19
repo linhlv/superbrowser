@@ -1,9 +1,9 @@
 import path from 'node:path';
-import { dialog, session, type BrowserWindow, type Session, type WebPreferences } from 'electron';
+import { dialog, session, webContents, type BrowserWindow, type Session, type WebContents, type WebPreferences } from 'electron';
 import type { AppState, Decision } from '../core/appState.ts';
 import { chromeMajor, rewriteClientHints, userAgent } from '../core/identity.ts';
 import {
-  decide, describeRequest, permissionKeys, policyFor, PromptQueue, remember, siteOrigin,
+  describeRequest, permissionKeys, policyFor, PromptQueue, siteOrigin, storeAnswer, verdictFor,
   type PermissionPrompt, type Verdict,
 } from '../core/permissions.ts';
 
@@ -15,16 +15,18 @@ export type SessionContext = {
   /** The profile whose tabs are on screen, if any. */
   shownProfile(): string | null;
   profileName(dir: string): string;
-  /** Remembered site decisions per profile; `setPermissions` stores (and saves) a new value. */
+  /** Saved site decisions per profile (only Allows are saved); `setPermissions` stores (and saves) a new value. */
   getPermissions(): AppState['permissions'];
   setPermissions(p: AppState['permissions']): void;
 };
 
 let context: SessionContext | null = null;
 const sessions = new Map<string, Session>();
-/** Answers given with "Remember for this site" unchecked: they hold until the app quits. */
+/** Blocks, and Allows given with "Remember for this site" unchecked: they hold until the app quits. */
 let forThisRun: AppState['permissions'] = {};
-const prompts = new PromptQueue(showPermissionSheet, currentVerdict);
+/** Main-frame page loads per tab, so a request from a page that has since gone can be dropped. */
+const navigations = new WeakMap<WebContents, number>();
+const prompts = new PromptQueue(showPermissionSheet, currentVerdict, stillWanted);
 
 /** Call once at startup, before the first `profileSession`. */
 export function configureSessions(ctx: SessionContext): void {
@@ -61,14 +63,15 @@ export function pageWebPreferences(dir: string): WebPreferences {
 
 /** Never granted silently: see `policyFor`. Asked permissions show one sheet at a time on the main window. */
 function installPermissionHandlers(s: Session, dir: string): void {
-  s.setPermissionRequestHandler((_wc, permission, callback, details) => {
+  s.setPermissionRequestHandler((wc, permission, callback, details) => {
     const mediaTypes = 'mediaTypes' in details ? details.mediaTypes : undefined;
     const keys = permissionKeys(permission, mediaTypes);
     const policy = policyFor(permission);
     const origin = siteOrigin(details.requestingUrl);
     if (policy !== 'ask') return callback(policy === 'allow');
     if (origin === null) return callback(false); // file:, about:, data:… pages are never asked
-    void prompts.request({ dir, origin, keys }).then((d) => callback(d === 'allow'));
+    const prompt = { dir, origin, keys, source: wc.id, navigation: navigationOf(wc) };
+    void prompts.request(prompt).then((d) => callback(d === 'allow'));
   });
 
   // Synchronous and never asks: answers what is already decided (e.g. Notification.permission).
@@ -78,7 +81,7 @@ function installPermissionHandlers(s: Session, dir: string): void {
     const origin = siteOrigin(requestingOrigin);
     if (origin === null) return false;
     const media = details.mediaType === 'video' || details.mediaType === 'audio' ? [details.mediaType] : undefined;
-    return currentVerdict({ dir, origin, keys: permissionKeys(permission, media) }) === 'allow';
+    return context !== null && verdictFor(context.getPermissions(), forThisRun, dir, origin, permissionKeys(permission, media)) === 'allow';
   });
 
   // Screen sharing goes through the macOS picker (macOS 15+). Without it there is no picker of our own: refuse.
@@ -88,14 +91,28 @@ function installPermissionHandlers(s: Session, dir: string): void {
   }, { useSystemPicker: true });
 }
 
-/** What is decided for a prompt without asking: remembered decisions first, then this run's answers. */
-function currentVerdict(p: PermissionPrompt): Verdict {
-  if (!context) return 'deny';
-  const remembered = decide(context.getPermissions()[p.dir], p.origin, p.keys, 'ask');
-  return remembered !== 'ask' ? remembered : decide(forThisRun[p.dir], p.origin, p.keys, 'ask');
+/** The tab's current page-load count; starts counting on the tab's first request. */
+function navigationOf(wc: WebContents): number {
+  const n = navigations.get(wc);
+  if (n !== undefined) return n;
+  navigations.set(wc, 0);
+  // Main frame, new document (reloads too); same-document changes (pushState) keep requests.
+  wc.on('did-navigate', () => navigations.set(wc, (navigations.get(wc) ?? 0) + 1));
+  return 0;
 }
 
-/** The permission sheet on the main window; stores the answer. No window: refused, nothing stored. */
+/** False once the requesting tab is closed or has loaded another page: its request is then dropped. */
+function stillWanted(p: PermissionPrompt): boolean {
+  const wc = webContents.fromId(p.source);
+  return wc !== undefined && !wc.isDestroyed() && navigations.get(wc) === p.navigation;
+}
+
+/** What is decided for a prompt without asking: saved Allows, then this run's answers. */
+function currentVerdict(p: PermissionPrompt): Verdict {
+  return context ? verdictFor(context.getPermissions(), forThisRun, p.dir, p.origin, p.keys) : 'deny';
+}
+
+/** The permission sheet on the main window; stores the answer (`storeAnswer`). No window: refused, nothing stored. */
 async function showPermissionSheet(p: PermissionPrompt): Promise<Decision> {
   const win = context?.mainWindow();
   if (!context || !win || win.isDestroyed()) return 'deny';
@@ -113,8 +130,11 @@ async function showPermissionSheet(p: PermissionPrompt): Promise<Decision> {
     checkboxChecked: true,
   });
   const d: Decision = response === 0 ? 'allow' : 'deny';
-  if (checkboxChecked) context.setPermissions(remember(context.getPermissions(), p.dir, p.origin, p.keys, d));
-  else forThisRun = remember(forThisRun, p.dir, p.origin, p.keys, d);
-  context.log(`${p.origin} ${p.keys.join('+')} in profile ${p.dir}: ${d}${checkboxChecked ? ' (remembered)' : ''}`);
+  // Only a remembered Allow is saved; a Block lasts for this run, so a stray Return can't block a site for good.
+  const saved = context.getPermissions();
+  const next = storeAnswer({ saved, run: forThisRun }, p.dir, p.origin, p.keys, d, checkboxChecked);
+  forThisRun = next.run;
+  if (next.saved !== saved) context.setPermissions(next.saved);
+  context.log(`${p.origin} ${p.keys.join('+')} in profile ${p.dir}: ${d}${next.saved !== saved ? ' (saved)' : ' (this run)'}`);
   return d;
 }
