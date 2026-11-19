@@ -1,11 +1,21 @@
 import type { Rect } from './appState.ts';
 
-export const SIDEBAR_W = 240, GAP = 8, BOTTOM_H = 44;
+/** Sidebar width, page inset at the sides, profile bar height, toolbar (back/forward/reload/address) height. */
+export const SIDEBAR_W = 240, GAP = 8, BOTTOM_H = 44, TOP_H = 44;
 
 /** Where the active tab's page goes, in window content coordinates. */
 export function tabBounds(size: { width: number; height: number }, sidebarVisible: boolean): Rect {
   const x = sidebarVisible ? SIDEBAR_W : GAP;
-  return { x, y: GAP, width: size.width - x - GAP, height: size.height - GAP - BOTTOM_H };
+  return { x, y: TOP_H, width: size.width - x - GAP, height: size.height - TOP_H - BOTTOM_H };
+}
+
+/**
+ * The toolbar view: the strip above the page, as wide as the page. While the address suggestions are open it is
+ * `height` tall (over the page, its empty part transparent), never shorter than the strip nor over the profile bar.
+ */
+export function toolbarBounds(size: { width: number; height: number }, sidebarVisible: boolean, height: number): Rect {
+  const tab = tabBounds(size, sidebarVisible);
+  return { x: tab.x, y: 0, width: tab.width, height: Math.min(Math.max(height, TOP_H), size.height - BOTTOM_H) };
 }
 
 export const FIND_W = 320, FIND_H = 44, FIND_INSET = 8;

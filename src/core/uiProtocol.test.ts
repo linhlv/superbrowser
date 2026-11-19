@@ -66,6 +66,8 @@ test('parseUiCommand: accepts every well-formed command and keeps only its field
     { type: 'setDisplayName', dir: 'Default', name: 'ACME' },
     { type: 'setSectionOpen', section: 'history', open: true },
     { type: 'setSectionOpen', section: 'bookmarks', open: false },
+    { type: 'toolbarHeight', height: 44 },
+    { type: 'toolbarHeight', height: 412 },
   ];
   for (const c of cases) assert.deepEqual(parseUiCommand(c, known), c);
   assert.deepEqual(parseUiCommand({ type: 'back', extra: 'x' }, known), { type: 'back' });
@@ -146,4 +148,10 @@ test('parseUiCommand: rejects bad pin and display-name commands', () => {
     { type: 'tabMenu', id: '3' },
     { type: 'setDisplayName', dir: 'Profile 9', name: 'x' }, { type: 'setDisplayName', dir: 'Default', name: 'x'.repeat(201) },
   ]) assert.equal(parseUiCommand(c, known), null, JSON.stringify(c));
+});
+
+test('parseUiCommand: toolbarHeight needs a whole number of pixels within 0–4000', () => {
+  for (const height of [-1, 4001, 1.5, NaN, '300', null, undefined]) {
+    assert.equal(parseUiCommand({ type: 'toolbarHeight', height }, known), null, String(height));
+  }
 });

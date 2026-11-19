@@ -1,5 +1,4 @@
 import type { SuperbrowserApi } from '../preload/ui.ts';
-import { setupSuggestions } from './parts/suggestions.ts';
 import { setupBookmarksSection } from './parts/bookmarksSection.ts';
 import { setupHistorySection } from './parts/historySection.ts';
 import { setupPinBar } from './parts/pinBar.ts';
@@ -13,21 +12,9 @@ declare global {
 
 const sb = window.superbrowser;
 const byId = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
-const address = byId<HTMLInputElement>('address');
-const backBtn = byId<HTMLButtonElement>('back');
-const forwardBtn = byId<HTMLButtonElement>('forward');
-const reloadBtn = byId<HTMLButtonElement>('reload');
 const tabList = byId('tablist');
 
 let current: UiState | null = null;
-
-// Address field: a click selects everything (mouseup would otherwise drop the selection).
-address.addEventListener('mousedown', (e) => {
-  if (document.activeElement !== address) { e.preventDefault(); address.focus(); }
-});
-address.addEventListener('focus', () => address.select());
-const suggestions = setupSuggestions({ address, list: byId('suggest'), sb, currentUrl: () => current?.url ?? '' });
-sb.onFocusAddress(() => { address.focus(); address.select(); });
 
 // Bookmarks and History: collapsible sections right under the tabs, always in that order. Opening or folding one changes
 // only layout (the tab rows stay as they are); a folded section asks the library for nothing.
@@ -66,8 +53,7 @@ sb.onPanel((req) => {
   if (req.panel === 'bookmarks' && req.highlight !== null) bookmarks.reveal(req.highlight);
 });
 sb.onLibrary((r) => {
-  if (r.kind === 'suggestions') suggestions.onReply(r);
-  else { bookmarks.onReply(r); history.onReply(r); }
+  if (r.kind !== 'suggestions') { bookmarks.onReply(r); history.onReply(r); } // suggestions go to the toolbar view
 });
 sb.onLibraryChanged(() => { bookmarks.onLibraryChanged(); history.onLibraryChanged(); });
 sb.onHistoryRecorded(() => history.onHistoryRecorded());
@@ -79,9 +65,6 @@ sb.onEditProfileName((dir) => profileBar.startEdit(dir));
 // Pinned tabs at the bar's right: a click goes to the pin's profile and tab, right-click opens its menu.
 const pinBar = setupPinBar({ bar: byId('pins'), sb });
 
-backBtn.addEventListener('click', () => sb.send({ type: 'back' }));
-forwardBtn.addEventListener('click', () => sb.send({ type: 'forward' }));
-reloadBtn.addEventListener('click', () => sb.send({ type: 'reload' }));
 byId('newtab').addEventListener('click', () => sb.send({ type: 'newTab' }));
 byId('addprofile').addEventListener('click', () => sb.send({ type: 'addProfileMenu' }));
 byId('toggle').addEventListener('click', () => sb.send({ type: 'toggleSidebar' }));
@@ -194,7 +177,6 @@ function renderDownloads(list: DownloadState[]): void {
 sb.onState((s) => {
   const first = current === null;
   if (current !== null && current.activeProfile !== s.activeProfile) {
-    suggestions.close();
     bookmarks.onProfileChanged();
     history.onProfileChanged();
   }
@@ -204,10 +186,6 @@ sb.onState((s) => {
   const color = s.profiles.find((p) => p.dir === s.activeProfile)?.color;
   if (color) document.body.style.setProperty('--tint', color);
 
-  if (document.activeElement !== address) address.value = s.url;
-  backBtn.disabled = !s.canGoBack;
-  forwardBtn.disabled = !s.canGoForward;
-  reloadBtn.disabled = s.activeTabId === null;
   renderTabs(s);
   profileBar.render(s);
   pinBar.render(s);

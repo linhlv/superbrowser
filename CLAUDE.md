@@ -44,7 +44,7 @@ scripts/make-icon.sh              # resources/Superbrowser.png → resources/ico
   - `historyRecorder.ts`: records visits from tab navigation events. `main.ts` turns each visit or title recorded in the shown profile into a throttled `IPC.historyRecorded` notice; an open History section at the top, not searching, refetches its first page. `libraryChanged` (edits, deletes, clears, imports) still reloads open sections unconditionally.
   - `libraryImport.ts`: copies Chrome's files to a temp dir and imports bookmarks and history (add-only).
 - **`src/preload/`**: `ui.ts` (contextBridge API for our UI pages) and `frame.ts` (per-session frame preload: passkey requests fail fast, `navigator.userAgentData` names Google Chrome).
-- **`src/ui/`**: the sidebar + bottom bar page (`index.html`, `ui.ts`) and the find bar (`find.html`, `find.ts`). Our own pages; CSP forbids inline styles/scripts. `src/ui/parts/` holds UI helper modules (`suggestions.ts`, `bookmarksSection.ts` and `historySection.ts` for the collapsible sections right under the tabs, `libraryRows.ts` for their shared rows, `profileBar.ts` for the pills and inline display-name edit, `pinBar.ts` for the pin tiles, `profileDrag.ts` for dragging profile pills, `dom.ts`) bundled into `ui.ts`; only `src/ui/*.ts` are entry points.
+- **`src/ui/`**: the sidebar + bottom bar page (`index.html`, `ui.ts`), the toolbar above the page (`toolbar.html`, `toolbar.ts`: back, forward, reload, address field and its suggestions) and the find bar (`find.html`, `find.ts`). Our own pages; CSP forbids inline styles/scripts. `src/ui/parts/` holds UI helper modules (`suggestions.ts` for the address suggestions, `bookmarksSection.ts` and `historySection.ts` for the collapsible sections right under the tabs, `libraryRows.ts` for their shared rows, `profileBar.ts` for the pills and inline display-name edit, `pinBar.ts` for the pin tiles, `profileDrag.ts` for dragging profile pills, `dom.ts`) bundled into the entry points; only `src/ui/*.ts` are entry points.
 - **`src/shared/types.ts`**: types and IPC channel names shared by main, preload and UI.
 
 New logic belongs in `src/core` with a test; keep `src/main` to wiring. Tests sit next to sources as `*.test.ts` (`node:test` + `node:assert/strict`). Imports between TS files use explicit `.ts` extensions (`import { x } from './profiles.ts'`) and only erasable TS syntax (no `enum`, `namespace` or constructor parameter properties). Node runs the tests by type stripping.
@@ -52,7 +52,8 @@ New logic belongs in `src/core` with a test; keep `src/main` to wiring. Tests si
 Window structure: one `BrowserWindow`. Its child views stack in insertion order:
 
 - the UI view first, filling the window;
-- each tab's view on top, only the active one visible;
+- the toolbar view (`Toolbar` in `browserWindow.ts`), a 44 px strip above the page (`toolbarBounds`). While the address suggestions are open it grows over the page (transparent except the card) and is raised to the top; when they close it shrinks back and returns to index 1, so a page in HTML full screen covers it;
+- each tab's view on top, only the active one visible, starting below the strip (`tabBounds`, `TOP_H`);
 - the find bar view, re-raised whenever it is shown.
 
 Popups are separate small windows (registered in `pages.ts`, `isPopupWindow`). Their title is always `host — page title (profile)` (`popupTitle`). Page shortcuts (⌘W, ⌘R, ⌘P, zoom, DevTools, Back/Forward) act on a focused popup; ⌘W closes it. Closing the main window quits: tab pages close at once (`TabManager.shutDown`), popups are destroyed, and the saved tabs are kept. ⌘W never closes the main window.
@@ -67,7 +68,7 @@ Popups are separate small windows (registered in `pages.ts`, `isPopupWindow`). T
   - `windowOpenTarget` decides tab, popup or deny: `blob:` opens as a popup, and anything but http(s), `blob:` and `about:blank` is denied.
 - **Pages get no privileged API.**
   - `src/preload/frame.ts` is registered per profile session. It runs in subframes because page views set `nodeIntegrationInSubFrames` (sandboxed, so pages still get no Node). It must never expose an API, IPC or `contextBridge.exposeInMainWorld` to pages. It only wraps `navigator.credentials` and `NavigatorUAData` via `executeInMainWorld`; the functions it runs there are serialized, so they use only their arguments (no module scope).
-  - UI commands are listened for only on the UI and find views' own `webContents.ipc`, and validated by `parseUiCommand`. The find view only accepts find commands.
+  - UI commands are listened for only on the UI, toolbar and find views' own `webContents.ipc`, and validated by `parseUiCommand`. The find view only accepts find commands; the toolbar view only back, forward, reload, navigate, suggest and its own height; the UI view not navigate, suggest or the toolbar height.
   - Any `ipcMain` handler you add must reject senders that aren't the app's UI or find views.
 - **Chrome data is read-only.**
   - Never write to `~/Library/Application Support/Google/Chrome/**` or the "Chrome Safe Storage" Keychain item.

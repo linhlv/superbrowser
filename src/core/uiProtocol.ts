@@ -91,6 +91,10 @@ export function parseUiCommand(raw: unknown, knownDirs: ReadonlySet<string>): Ui
       return dir !== null && isText(raw['name'], 200) ? { type, dir, name: raw['name'] } : null;
     case 'setSectionOpen':
       return isSection(raw['section']) && typeof raw['open'] === 'boolean' ? { type, section: raw['section'], open: raw['open'] } : null;
+    case 'toolbarHeight': {
+      const height = raw['height'];
+      return Number.isInteger(height) && (height as number) >= 0 && (height as number) <= 4000 ? { type, height: height as number } : null;
+    }
     case 'addProfileMenu':
     case 'newTab':
     case 'back':

@@ -1,6 +1,6 @@
 # Superbrowser
 
-A macOS browser that shows every Chrome profile in one ordinary window. It has an Arc-style sidebar with the tabs of the current profile, its bookmarks and history in collapsible sections under them, and a profile bar at the bottom: click a profile's pill or press ⌃1…⌃9 to switch, and pin tabs from any profile at its right end. You can give a profile your own display name. Each profile has its own isolated storage, so every profile stays signed in to its own accounts at the same time. Profile names and colours come from Chrome; the bar order is your own. Logins, bookmarks and history can be imported from Chrome so you don't start over. Superbrowser is built on Electron (Chromium) and presents itself to sites as Google Chrome.
+A macOS browser that shows every Chrome profile in one ordinary window. It has a toolbar above the page (back, forward, reload and the address field), an Arc-style sidebar with the tabs of the current profile, its bookmarks and history in collapsible sections under them, and a profile bar at the bottom: click a profile's pill or press ⌃1…⌃9 to switch, and pin tabs from any profile at its right end. You can give a profile your own display name. Each profile has its own isolated storage, so every profile stays signed in to its own accounts at the same time. Profile names and colours come from Chrome; the bar order is your own. Logins, bookmarks and history can be imported from Chrome so you don't start over. Superbrowser is built on Electron (Chromium) and presents itself to sites as Google Chrome.
 
 Requires macOS on Apple Silicon, Google Chrome (for profiles and login import), Node 22 and the Command Line Tools (no Xcode).
 
@@ -124,7 +124,7 @@ Walk this list on the installed app after a change that affects it.
 
 **Window and profiles**
 
-1. The window opens on the first visible profile. The page has rounded corners inset 8 px from the window edge, and the sidebar is on the left. There is no white flash at startup.
+1. The window opens on the first visible profile. The page has rounded corners, inset 8 px from the window's sides with the toolbar strip (back, forward, reload, address) above it, and the sidebar is on the left. There is no white flash at startup.
 2. ⌃2 shows another profile. ⌃1 returns to the first page without a reload, and the scroll position is kept. The window tint changes to the profile's colour.
 3. Sign in to a site in one profile. Another profile is still signed out there.
 4. Hovering a profile pill changes only its background; no pill moves. The tooltip shows the name and ⌃N. Clicking a pill switches profile.
@@ -139,8 +139,8 @@ Walk this list on the installed app after a change that affects it.
 **Sidebar and tabs**
 
 12. Clicking a tab, **+ New Tab**, ×, Back, Forward and Reload all work. Typing `example.com` + Enter in the address field opens it.
-13. ◧ or ⌘S hides the sidebar. The page fills the width, the window buttons disappear, and the bottom bar still switches profiles. Showing the sidebar brings the buttons back at the same place.
-14. The window can be dragged by the bottom bar, the top 40 px of the sidebar and the 8 px gap above the page. Clicking near the top of a page (for example Google's account avatar) clicks the page and doesn't drag the window. Favicons appear for loaded tabs.
+13. ◧ or ⌘S hides the sidebar. The page and the toolbar fill the width, the window buttons disappear, the address field and ⌘L still work, and the bottom bar still switches profiles. Showing the sidebar brings the buttons back at the same place.
+14. The window can be dragged by the bottom bar, the top 40 px of the sidebar and the empty parts of the toolbar strip above the page. Clicking near the top of a page (for example Google's account avatar) clicks the page and doesn't drag the window. Favicons appear for loaded tabs.
 
 **Shortcuts and find**
 
@@ -195,7 +195,7 @@ Walk this list on the installed app after a change that affects it.
 
 39. **Profiles ▸ Import Bookmarks and History from Chrome**: no Keychain prompt and no tab reload. One sheet lists a line per visible profile, such as "Personal: 175 bookmarks, 12,685 pages of history imported (3 skipped).". Run it again: every line reads "0 bookmarks, 0 pages of history imported (N skipped).". It also works while Chrome is running, and Chrome's bookmarks and history are unchanged afterwards. The "+" menu has the same item.
 40. On first run (see Login import), the question reads "Import your logins, bookmarks and history from Chrome for all profiles?". **Import All** runs the logins import, then this one with its own summary. Cancelling the logins explanation still imports bookmarks and history.
-41. Click the address field and type part of a page title or host. At most 6 rows appear under the field with stars on bookmarks and "Search Google for …" last. Enter with no row selected goes to what you typed. Arrow keys move through rows, Up past the first restores your text, and Esc restores the address and closes the list. A host completes inline, and Backspace removes the completion. A completion that runs into a path keeps its capitals (try a Google Docs link: Enter opens the document). ⌃2 closes the list, and then only that profile's pages are suggested.
+41. Click the address field in the toolbar and type part of a page title or host. At most 6 rows appear in a card under the field, over the page, with stars on bookmarks and "Search Google for …" last. Enter with no row selected goes to what you typed. Arrow keys move through rows, Up past the first restores your text, and Esc restores the address and closes the list. A host completes inline, and Backspace removes the completion. A completion that runs into a path keeps its capitals (try a Google Docs link: Enter opens the document). ⌃2 closes the list, and then only that profile's pages are suggested.
 42. Browse in one profile: open A, click through to B, reload B, go Back, then type a new address C. Only visits are recorded (not reload or Back as new visits). Reopening a closed tab with ⇧⌘T adds no visit. Another profile's History section doesn't show these pages.
 43. ⌘Y opens the History section (if folded) under the tabs with its search box focused; the tab list stays, and the active tab stays visible in it. With History open, visit a new page: it appears under Today within a couple of seconds (not while you are scrolled down or searching). Rows are grouped by Today, Yesterday and dates, each with its time and host. Typing "ho so" finds Vietnamese titles such as "Hồ sơ…". Scrolling to the bottom loads older days. A click opens the page in the current tab and ⌘-click in a new tab. Right-click ▸ **Delete from History** removes every visit to that page (all its rows, on every day) and its suggestion. ⌘Y or a click on its header folds it, and Downloads stay visible.
 44. ⌥⌘B opens the Bookmarks section with the imported folders. Click a folder to open or close it; an unnamed folder shows "Untitled". Searching shows a flat list with folder paths. Right-click a bookmark: Open in New Tab, Copy Link, Rename…, Move to ▸, Delete. Right-click a folder: New Folder…, Rename…, Delete (a non-empty folder asks first). In Rename, Enter saves and Esc or clicking away cancels.

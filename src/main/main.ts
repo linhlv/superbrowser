@@ -22,7 +22,7 @@ import { barPins, barProfiles, parseUiCommand } from '../core/uiProtocol.ts';
 import {
   IPC, type BookmarkNode, type DownloadState, type LibraryReply, type Section, type UiCommand, type UiState,
 } from '../shared/types.ts';
-import { createBrowserWindow, createUiView, FindBar, layoutWindow } from './browserWindow.ts';
+import { createBrowserWindow, createUiView, FindBar, layoutWindow, Toolbar } from './browserWindow.ts';
 import { newProfileInChrome, openProfileInChrome, readChromeProfiles } from './chrome.ts';
 import { ImportFlow } from './importFlow.ts';
 import { HistoryRecorder } from './historyRecorder.ts';
@@ -124,6 +124,7 @@ function start(): void {
     const window = createBrowserWindow(state);
     win = window;
     const ui = createUiView(window, log); // before any tab view, so it stays below them
+    const toolbar = new Toolbar(window, log); // right above the UI view, below the tabs (raised while suggesting)
     const findBar = new FindBar(window, log);
     window.setWindowButtonVisibility(state.sidebarVisible);
 
@@ -145,6 +146,7 @@ function start(): void {
         downloads: downloadsOf(downloads, snap.dir), // other profiles' file names stay out of view (screen sharing)
       };
       ui.webContents.send(IPC.state, uiState);
+      if (!toolbar.view.webContents.isDestroyed()) toolbar.view.webContents.send(IPC.state, uiState);
     };
     /** Sends to the UI view unless it is gone (the window is closing). */
     const toUi = (channel: string, ...args: unknown[]): void => {
@@ -303,7 +305,7 @@ function start(): void {
       }).popup({ window });
     };
 
-    const relayout = () => layoutWindow(window, ui, findBar, tabs, state.sidebarVisible);
+    const relayout = () => layoutWindow(window, ui, toolbar, findBar, tabs, state.sidebarVisible);
     relayout();
 
     const setSidebarVisible = (visible: boolean): void => {
@@ -314,12 +316,11 @@ function start(): void {
       pushState();
     };
 
-    /** Sidebar shown and the address field focused (⌘T, ⌘L), in the main window even if a popup had focus. */
+    /** The toolbar's address field focused (⌘T, ⌘L), in the main window even if a popup had focus. */
     const focusAddress = (): void => {
-      if (!state.sidebarVisible) setSidebarVisible(true);
       window.focus();
-      ui.webContents.focus();
-      ui.webContents.send(IPC.focusAddress);
+      toolbar.view.webContents.focus();
+      toolbar.view.webContents.send(IPC.focusAddress);
     };
 
     // Bookmarks and history: every command and menu item acts on the profile shown when it arrives.
@@ -625,11 +626,14 @@ function start(): void {
         case 'revealDownload': revealDownload(cmd.id); break;
         case 'find': findBar.find(cmd.text, cmd.forward); break;
         case 'findClose': findBar.close(true); break;
-        case 'suggest':
+        case 'suggest': // from the toolbar view, whose address field shows the suggestions
+          if (!toolbar.view.webContents.isDestroyed()) toolbar.view.webContents.send(IPC.library, libraryReply(cmd));
+          break;
         case 'historyPage':
         case 'bookmarks':
           toUi(IPC.library, libraryReply(cmd));
           break;
+        case 'toolbarHeight': toolbar.setHeight(cmd.height, state.sidebarVisible); break;
         case 'openUrl':
           if (cmd.newTab) tabs.newTab(cmd.url);
           else tabs.navigate(cmd.url);
@@ -666,9 +670,13 @@ function start(): void {
       });
     };
     const isFind = (cmd: UiCommand) => cmd.type === 'find' || cmd.type === 'findClose';
-    listen(ui, (cmd) => !isFind(cmd));
+    const toolbarCommands = new Set<UiCommand['type']>(['back', 'forward', 'reload', 'navigate', 'suggest', 'toolbarHeight']);
+    const isToolbarOnly = (cmd: UiCommand) => cmd.type === 'navigate' || cmd.type === 'suggest' || cmd.type === 'toolbarHeight';
+    listen(ui, (cmd) => !isFind(cmd) && !isToolbarOnly(cmd));
+    listen(toolbar.view, (cmd) => toolbarCommands.has(cmd.type));
     listen(findBar.view, isFind);
     ui.webContents.on('did-finish-load', pushState);
+    toolbar.view.webContents.on('did-finish-load', pushState);
     // Back from Chrome (e.g. after creating a profile there): pick up the new profile.
     window.on('focus', () => profiles.refresh(readChromeProfiles()));
 

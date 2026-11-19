@@ -14,27 +14,18 @@ body {
 body.ready { transition: --tint .25s; }
 button { font: inherit; color: inherit; cursor: default; }
 
-/* Window drag handles: the sidebar's top 40 px (traffic lights sit there) and the 8 px gap above the page.
-   Neither overlaps the tab view, so the page never becomes a drag region. */
+/* Window drag handle: the sidebar's top 40 px (traffic lights sit there). The toolbar view's strip above the page and
+   the profile bar drag the window too; none of them overlaps the tab view, so the page never becomes a drag region. */
 .drag { position: absolute; left: 0; right: 0; top: 0; height: 40px; -webkit-app-region: drag; }
-.drag.gap { height: 8px; }
 
-/* Sidebar: navigation, address field, tabs */
+/* Sidebar: tabs, Bookmarks and History, downloads (back, forward, reload and the address field are in the toolbar view) */
 #side { position: absolute; left: 0; top: 0; bottom: var(--bar-h); width: var(--side-w); display: flex; flex-direction: column; padding: 46px 10px 6px; }
 body.collapsed #side { display: none; }
-.nav { position: absolute; top: 10px; right: 10px; display: flex; gap: 2px; }
-.nav button, #toggle {
+#toggle {
   -webkit-app-region: no-drag; background: none; border: 0; opacity: .8;
   font-size: 15px; width: 26px; height: 24px; padding: 0; border-radius: 6px;
 }
-.nav button:hover:not(:disabled) { background: rgba(255,255,255,.15); opacity: 1; }
 #toggle:hover { background: rgba(255,255,255,.15); } /* the bar's hovers change only the background */
-.nav button:disabled { opacity: .3; }
-
-#address { width: 100%; padding: 8px 10px; border-radius: 9px; border: 0; background: rgba(255,255,255,.14); color: #fff; font: inherit; outline: none; }
-#address::placeholder { color: rgba(255,255,255,.55); }
-#address:focus { background: rgba(255,255,255,.95); color: #111; }
-#address:focus::placeholder { color: rgba(0,0,0,.4); }
 
 /* The tabs take the height they need (then scroll), so the section headers sit right under New Tab. */
 #tabs { flex: 0 1 auto; min-height: 0; overflow-y: auto; margin-top: 12px; scrollbar-width: thin; }
@@ -50,9 +41,9 @@ body.collapsed #side { display: none; }
 #newtab { padding: 7px 8px; border-radius: 8px; opacity: .75; white-space: pre; }
 #newtab:hover { background: rgba(255,255,255,.1); opacity: 1; }
 /* With a section open, the tabs take what they need up to half the column, then scroll, but always keep about two
-   rows. Floors and caps fit the 500 px minimum window (404 px column: 500 − 44 bar − 46 − 6 padding): address 32 + 12
-   + tabs 64, two open sections 2 × (8 + 88) + 8 below History, Downloads 20% (81) = 389, so nothing spills onto the
-   profile bar. */
+   rows. Floors and caps fit the 500 px minimum window (404 px column: 500 − 44 bar − 46 − 6 padding): 12 + tabs 64,
+   two open sections 2 × (8 + 88) + 8 below History, Downloads 20% (81) = 357, so nothing spills onto the profile
+   bar. */
 #side:has(.sec.open) #tabs { max-height: 50%; min-height: 64px; }
 
 /* Bookmarks and History sections right under the tabs: a folded one is just its header; open ones share the free height
@@ -174,14 +165,3 @@ body.pf-dragging, body.pf-dragging * { cursor: grabbing; }
   position: absolute; right: 2px; bottom: 2px; width: 9px; height: 9px; border-radius: 50%;
   box-shadow: 0 0 0 1.5px rgba(0,0,0,.35);
 }
-
-/* Address suggestions: a card under the field, within the sidebar's inner width (never over the page) */
-#suggest { position: absolute; left: 10px; right: 10px; z-index: 5; padding: 4px; border-radius: 10px; background: #fff; color: #111; box-shadow: 0 8px 24px rgba(0,0,0,.35); }
-#suggest[hidden] { display: none; }
-.sg { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 7px; }
-.sg.on { background: rgba(10,132,255,.14); }
-.sg .icon { width: 16px; height: 16px; border-radius: 3px; flex: none; background: rgba(127,127,127,.4); }
-.sg-t { flex: 1; min-width: 0; }
-.sg-title, .sg-url { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.sg-url { font-size: 11px; color: #666; }
-.sg-star { flex: none; color: #e8a400; }

@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { app, BrowserWindow, screen, WebContentsView, type WebContents } from 'electron';
 import type { AppState, Rect } from '../core/appState.ts';
-import { findBarBounds, restoreBounds, tabBounds } from '../core/layout.ts';
+import { findBarBounds, restoreBounds, tabBounds, toolbarBounds, TOP_H } from '../core/layout.ts';
 import { IPC, type FindResult } from '../shared/types.ts';
 import type { TabManager } from './tabManager.ts';
 
@@ -47,6 +47,40 @@ function createPageView(win: BrowserWindow, file: string, log: (msg: string) => 
  */
 export function createUiView(win: BrowserWindow, log: (msg: string) => void): WebContentsView {
   return createPageView(win, 'index.html', log);
+}
+
+/**
+ * Back, forward, reload and the address field, in a strip above the page. Its own view (added right after the UI view,
+ * so tab views stack above it) because the address suggestions drop down over the page: while they show, the view
+ * grows to fit them and is raised over the tabs; when they close it shrinks back to the strip and returns below them
+ * (so a page in HTML full screen covers it).
+ */
+export class Toolbar {
+  readonly view: WebContentsView;
+  private readonly win: BrowserWindow;
+  /** What the page asked for: 0 for just the strip, else the height down to the suggestions card. */
+  private height = 0;
+
+  constructor(win: BrowserWindow, log: (msg: string) => void) {
+    this.win = win;
+    this.view = createPageView(win, 'toolbar.html', log);
+  }
+
+  get expanded(): boolean { return this.height > TOP_H; }
+
+  /** The page asked for a new height: grows (and rises over the tabs) or shrinks back to the strip. */
+  setHeight(height: number, sidebarVisible: boolean): void {
+    const wasExpanded = this.expanded;
+    this.height = height;
+    if (this.expanded && !wasExpanded) this.win.contentView.addChildView(this.view); // to the top
+    else if (!this.expanded && wasExpanded) this.win.contentView.addChildView(this.view, 1); // back above the UI view
+    this.layout(sidebarVisible);
+  }
+
+  layout(sidebarVisible: boolean): void {
+    const [width = 0, height = 0] = this.win.getContentSize();
+    this.view.setBounds(toolbarBounds({ width, height }, sidebarVisible, this.height));
+  }
 }
 
 /**
@@ -137,9 +171,12 @@ export class FindBar {
   }
 }
 
-export function layoutWindow(win: BrowserWindow, ui: WebContentsView, findBar: FindBar, tabs: TabManager, sidebarVisible: boolean): void {
+export function layoutWindow(
+  win: BrowserWindow, ui: WebContentsView, toolbar: Toolbar, findBar: FindBar, tabs: TabManager, sidebarVisible: boolean,
+): void {
   const [width = 0, height = 0] = win.getContentSize();
   ui.setBounds({ x: 0, y: 0, width, height });
+  toolbar.layout(sidebarVisible);
   const rect = tabBounds({ width, height }, sidebarVisible);
   tabs.layout(rect);
   findBar.layout(rect);

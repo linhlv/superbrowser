@@ -33,7 +33,9 @@ export type UiCommand =
   | { type: 'renameBookmark'; id: number; title: string }
   | { type: 'selectPin'; key: string } | { type: 'pinMenu'; key: string }
   | { type: 'tabMenu'; id: number } | { type: 'setDisplayName'; dir: string; name: string }
-  | { type: 'setSectionOpen'; section: Section; open: boolean };
+  | { type: 'setSectionOpen'; section: Section; open: boolean }
+  /** The toolbar view's height: the strip, or taller while the address suggestions are open. */
+  | { type: 'toolbarHeight'; height: number };
 export type Suggestion = { url: string; title: string; bookmarked: boolean };
 export type HistoryRow = { url: string; title: string; time: number; day: number; favicon: string | null };
 export type BookmarkNode =

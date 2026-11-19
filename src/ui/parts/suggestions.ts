@@ -14,8 +14,11 @@ function span(className: string, text: string): HTMLElement {
 /** The dropdown under the address field. Reply data is untrusted: rows are built with textContent only. */
 export function setupSuggestions(opts: {
   address: HTMLInputElement; list: HTMLElement; sb: SuperbrowserApi; currentUrl: () => string;
+  /** Called after the list opened, closed or changed size. */
+  onToggle?: () => void;
 }): { onReply(r: LibraryReply): void; close(): void } {
   const { address, list, sb, currentUrl } = opts;
+  const toggled = (): void => opts.onToggle?.();
   let typed = '';
   let seq = 0;
   let rows: Row[] = [];
@@ -27,6 +30,7 @@ export function setupSuggestions(opts: {
     selected = -1;
     list.replaceChildren();
     list.hidden = true;
+    toggled();
   }
 
   /** Closes the list and invalidates any request still in flight. */
@@ -107,7 +111,9 @@ export function setupSuggestions(opts: {
     selected = -1;
     list.replaceChildren(...rows.map((x) => x.el));
     list.style.top = `${address.offsetTop + address.offsetHeight + 4}px`;
+    list.style.left = `${address.offsetLeft}px`; // the card lines up with the field
     list.hidden = false;
+    toggled();
     const c = r.completion;
     if (c !== null && c.length > typed.length && c.toLowerCase().startsWith(typed.toLowerCase())
       && !lastInputType.startsWith('delete')
