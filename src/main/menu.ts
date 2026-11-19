@@ -2,7 +2,10 @@ import { Menu, type MenuItemConstructorOptions } from 'electron';
 import type { ImportMode } from '../core/cookies.ts';
 import type { Profile } from '../shared/types.ts';
 
-/** What the application menu shows and does. Rebuild the menu when a shown field changes. */
+/**
+ * What the application menu shows and does. Rebuild the menu when a shown field changes. Page commands
+ * (close, reload, print, find, zoom, DevTools, back/forward) act on a focused popup if there is one (main.ts).
+ */
 export type MenuContext = {
   profiles: Profile[]; // visible, in bar order (⌃1…⌃9 follow it)
   hiddenProfiles: Profile[];
@@ -59,7 +62,7 @@ export function buildMenu(ctx: MenuContext): Menu {
         { label: 'Reopen Closed Tab', accelerator: 'Shift+CmdOrCtrl+T', click: () => ctx.reopenClosedTab() },
         { label: 'Open Location…', accelerator: 'CmdOrCtrl+L', click: () => ctx.openLocation() },
         sep,
-        // Closes the tab only, never the window (that's the red button or ⌘Q).
+        // Closes the tab only, never the main window (that's the red button or ⌘Q); in a focused popup, the popup.
         { label: 'Close Tab', accelerator: 'CmdOrCtrl+W', click: () => ctx.closeTab() },
         sep,
         { label: 'Print…', accelerator: 'CmdOrCtrl+P', click: () => ctx.print() },

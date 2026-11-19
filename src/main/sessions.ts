@@ -82,7 +82,10 @@ function installPermissionHandlers(s: Session, dir: string): void {
     if (policy !== 'ask') return callback(policy === 'allow');
     if (origin === null) return callback(false); // file:, about:, data:… pages are never asked
     const prompt = { dir, origin, keys, source: wc.id, navigation: navigationOf(wc) };
-    void prompts.request(prompt).then((d) => callback(d === 'allow'));
+    void prompts.request(prompt).then((d) => callback(d === 'allow'), (e: unknown) => {
+      context?.log(`permission prompt failed: ${e instanceof Error ? e.message : String(e)}`);
+      callback(false);
+    });
   });
 
   // Synchronous and never asks: answers what is already decided (e.g. Notification.permission).

@@ -32,16 +32,23 @@ export class TabManager {
   /** The tab whose page is in HTML full screen (a video): its view fills the whole window. */
   private fullScreenId: number | null = null;
   private nextId = 1;
+  /** Tabs asked to close whose page may still say "Stay" (beforeunload); they go when their contents are destroyed. */
+  private readonly closing = new Set<number>();
+  /** Set once the window is closing: views are going away, but the tabs must stay in the saved state. */
+  private shuttingDown = false;
   /** Links and popups from a page open in the page's own profile (see `wirePage`). */
   private readonly pageHost: PageHost;
 
-  constructor(win: BrowserWindow, onChange: () => void, log: (msg: string) => void) {
+  constructor(win: BrowserWindow, onChange: () => void, log: (msg: string) => void, profileName: (dir: string) => string) {
     this.win = win;
     this.onChange = onChange;
     this.log = log;
     this.pageHost = {
       log,
-      openTab: (dir, url, opts) => void this.newTab(url, { dir, afterId: opts.afterId ?? undefined, activate: opts.activate }),
+      profileName,
+      openTab: (dir, url, opts) => {
+        if (!this.shuttingDown) this.newTab(url, { dir, afterId: opts.afterId ?? undefined, activate: opts.activate });
+      },
     };
   }
 
@@ -69,7 +76,7 @@ export class TabManager {
       return;
     }
     this.refreshVisibility();
-    this.onChange();
+    this.changed();
   }
 
   /** Returns the new tab's id, or null when no profile is shown and none is given. */
@@ -81,11 +88,32 @@ export class TabManager {
     this.profiles.set(dir, openTab(tabs, tab, { activate: opts.activate ?? true, afterId: opts.afterId }));
     this.createView(dir, tab);
     this.refreshVisibility();
-    this.onChange();
+    this.changed();
     return tab.id;
   }
 
+  /**
+   * Closes the tab once its page agrees: a page with a beforeunload handler gets the "Leave site?" sheet
+   * (pages.ts), and on Stay the tab stays as it is. The tab leaves the model when its contents are destroyed.
+   */
   closeTab(id: number): void {
+    if (this.dirOf(id) === null) return;
+    const wc = openContents(this.views.get(id));
+    if (!wc) {
+      this.removeTab(id);
+      return;
+    }
+    this.closing.add(id);
+    wc.close({ waitForBeforeUnload: true });
+  }
+
+  /** The window is closing (the app quits): closes every page now (no beforeunload) and keeps the tabs as saved. */
+  shutDown(): void {
+    this.shuttingDown = true;
+    for (const view of this.views.values()) openContents(view)?.close();
+  }
+
+  private removeTab(id: number): void {
     const dir = this.dirOf(id);
     if (dir === null) return;
     this.profiles.set(dir, closeTab(this.profiles.get(dir)!, id));
@@ -95,7 +123,7 @@ export class TabManager {
       return;
     }
     this.refreshVisibility();
-    this.onChange();
+    this.changed();
   }
 
   reopenClosedTab(): void {
@@ -105,7 +133,7 @@ export class TabManager {
     this.profiles.set(dir, reopened.state);
     this.createView(dir, reopened.tab);
     this.refreshVisibility();
-    this.onChange();
+    this.changed();
   }
 
   selectTab(id: number): void {
@@ -113,7 +141,7 @@ export class TabManager {
     if (dir === null) return;
     this.profiles.set(dir, activateTab(this.profiles.get(dir)!, id));
     this.refreshVisibility();
-    this.onChange();
+    this.changed();
   }
 
   selectTabByShortcut(n: number): void {
@@ -149,20 +177,20 @@ export class TabManager {
     if (muted) this.muted.add(dir);
     else this.muted.delete(dir);
     for (const [id, view] of this.views) {
-      if (this.dirOf(id) === dir) view.webContents.setAudioMuted(muted);
+      if (this.dirOf(id) === dir) openContents(view)?.setAudioMuted(muted);
     }
   }
 
   /** Reloads the profile's tabs that have loaded (lazy ones load fresh when first shown anyway). */
   reloadProfile(dir: string): void {
     for (const [id, view] of this.views) {
-      if (this.dirOf(id) === dir) view.webContents.reload();
+      if (this.dirOf(id) === dir) openContents(view)?.reload();
     }
   }
 
   activeWebContents(): WebContents | null {
     const id = this.activeTab()?.id;
-    return id === undefined ? null : this.views.get(id)?.webContents ?? null;
+    return id === undefined ? null : openContents(this.views.get(id));
   }
 
   snapshot(): { dir: string; tabs: UiTab[]; activeTabId: number | null; url: string; canGoBack: boolean; canGoForward: boolean } {
@@ -194,6 +222,11 @@ export class TabManager {
   layout(rect: Rect): void {
     this.bounds = rect;
     for (const [id, view] of this.views) view.setBounds(id === this.fullScreenId ? this.windowRect() : rect);
+  }
+
+  /** Tabs changed: save and show it, unless the window is closing (pages going away must not drop saved tabs). */
+  private changed(): void {
+    if (!this.shuttingDown) this.onChange();
   }
 
   private activeTab(): TabRecord | undefined {
@@ -274,8 +307,8 @@ export class TabManager {
     if (this.shownId === id) this.shownId = null;
     if (this.fullScreenId === id) this.fullScreenId = null;
     if (!view) return;
-    this.win.contentView.removeChildView(view);
-    view.webContents.close();
+    if (!this.win.isDestroyed()) this.win.contentView.removeChildView(view);
+    openContents(view)?.close();
   }
 
   private wire(view: WebContentsView, dir: string, id: number): void {
@@ -287,13 +320,13 @@ export class TabManager {
       const dir = this.dirOf(id);
       if (dir === null) return;
       this.profiles.set(dir, updateTab(this.profiles.get(dir)!, id, p));
-      this.onChange();
+      this.changed();
     };
     const setLive = (p: Partial<{ favicon: string | null; loading: boolean }>) => {
       const entry = this.live.get(id);
       if (!entry) return;
       Object.assign(entry, p);
-      this.onChange();
+      this.changed();
     };
     wc.on('page-title-updated', (_e, title) => { if (current()) patch({ title }); });
     wc.on('did-navigate', (_e, url) => {
@@ -310,9 +343,19 @@ export class TabManager {
     wc.on('did-fail-load', (_e, code, description, url, isMainFrame) => {
       if (isMainFrame && code !== ERR_ABORTED) this.log(`tab ${id} failed to load ${url}: ${description} (${code})`);
     });
+    // Closed by closeTab (the page didn't object, or the user chose Leave): the tab goes now.
+    wc.once('destroyed', () => {
+      if (this.closing.delete(id) && current() && !this.shuttingDown) this.removeTab(id);
+    });
     wc.on('enter-html-full-screen', () => { if (current()) this.enterFullScreen(id); });
     wc.on('leave-html-full-screen', () => { if (current()) this.leaveFullScreen(id); });
   }
+}
+
+/** A view's page, unless it is closed (Electron then drops the view's `webContents`). */
+function openContents(view: WebContentsView | undefined): WebContents | null {
+  const wc = view?.webContents as WebContents | undefined;
+  return wc && !wc.isDestroyed() ? wc : null;
 }
 
 /** Failures are logged by the tab's `did-fail-load` listener (which also sees link clicks), so the rejection is only noise. */

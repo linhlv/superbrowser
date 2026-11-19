@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   emptyTabs, openTab, closeTab, reopenClosed, activateTab, updateTab, tabIdForShortcut, toSaved, fromSaved,
-  popupWindowOptions, windowOpenTarget, isOpenableLink, PAGE_WEB_PREFERENCES, sameSavedTabs,
+  popupWindowOptions, windowOpenTarget, isOpenableLink, PAGE_WEB_PREFERENCES, sameSavedTabs, popupTitle,
   type ProfileTabs, type TabRecord,
 } from './tabs.ts';
 
@@ -239,4 +239,18 @@ test('sameSavedTabs: equal only when every profile has the same urls, titles, or
   assert.equal(sameSavedTabs(a, fewer), false);
   assert.equal(sameSavedTabs(a, { ...copy(), P2: { tabs: [], activeIndex: 0 } }), false);
   assert.equal(sameSavedTabs({ ...copy(), P2: { tabs: [], activeIndex: 0 } }, a), false);
+});
+
+test('popupTitle: the current host first, then the page title and the profile', () => {
+  assert.equal(popupTitle('https://accounts.google.com/signin?x=1', 'Sign in – Google Accounts', 'Work'),
+    'accounts.google.com — Sign in – Google Accounts (Work)');
+  assert.equal(popupTitle('http://localhost:3000/a', 'App', 'Work'), 'localhost:3000 — App (Work)');
+  assert.equal(popupTitle('https://evil.test/', '', 'Work'), 'evil.test (Work)');
+});
+
+test('popupTitle: IDN hosts show as punycode; blob: shows its origin host; others the URL itself', () => {
+  assert.equal(popupTitle('https://gооgle.com/', 'Sign in', 'Work'), 'xn--ggle-55da.com — Sign in (Work)');
+  assert.equal(popupTitle('blob:https://app.test/0b7e-11', 'invoice.pdf', 'Work'), 'app.test — invoice.pdf (Work)');
+  assert.equal(popupTitle('about:blank', '', 'Work'), 'about:blank (Work)');
+  assert.equal(popupTitle('', '', 'Work'), 'about:blank (Work)');
 });

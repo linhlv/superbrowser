@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { app, BrowserWindow, Menu, Notification, type WebContentsView } from 'electron';
+import { app, BrowserWindow, Menu, Notification, type WebContents, type WebContentsView } from 'electron';
 import { chromeMajor, userAgent } from '../core/identity.ts';
 import { mergeProfiles } from '../core/profiles.ts';
 import { createStore } from '../core/store.ts';
@@ -11,6 +11,7 @@ import { createBrowserWindow, createUiView, FindBar, layoutWindow } from './brow
 import { openProfileInChrome, readChromeProfiles } from './chrome.ts';
 import { ImportFlow } from './importFlow.ts';
 import { buildMenu, type MenuContext } from './menu.ts';
+import { isPopupWindow } from './pages.ts';
 import { ProfileManager } from './profileManager.ts';
 import { configureSessions, revealDownload } from './sessions.ts';
 import { TabManager } from './tabManager.ts';
@@ -25,6 +26,9 @@ function describe(value: unknown): string {
   try { text = JSON.stringify(value) ?? String(value); } catch { text = String(value); }
   return text.length > 200 ? text.slice(0, 200) + '…' : text;
 }
+
+/** A rejected promise nobody awaits: logged, not an unhandled rejection. */
+const logFailure = (what: string) => (e: unknown): void => log(`${what} failed: ${e instanceof Error ? e.stack ?? e.message : String(e)}`);
 
 /** Zoom levels (factor 1.2^level) step by half a level; Chromium allows factors 0.25–5. */
 const ZOOM_STEP = 0.5, MIN_ZOOM = -7.5, MAX_ZOOM = 8.5;
@@ -52,13 +56,15 @@ function start(): void {
   });
   app.on('window-all-closed', () => app.quit());
 
+  const profileName = (dir: string): string => state.knownProfiles.find((p) => p.dir === dir)?.name ?? dir;
+
   void app.whenReady().then(() => {
     configureSessions({
       log,
       mainWindow: () => win,
       // `tabs` is created below; sessions (and so permission requests) only exist once it has made a tab.
       shownProfile: () => tabs.snapshot().dir || null,
-      profileName: (dir) => state.knownProfiles.find((p) => p.dir === dir)?.name ?? dir,
+      profileName,
       getPermissions: () => state.permissions,
       setPermissions: (p) => {
         state.permissions = p;
@@ -112,7 +118,7 @@ function start(): void {
       }
       findBar.follow(tabs.activeWebContents()); // switching tab or profile closes the find bar
       pushState();
-    }, log);
+    }, log, profileName);
     const profiles = new ProfileManager({
       state,
       tabs,
@@ -142,9 +148,10 @@ function start(): void {
       pushState();
     };
 
-    /** Sidebar shown and the address field focused (⌘T, ⌘L). */
+    /** Sidebar shown and the address field focused (⌘T, ⌘L), in the main window even if a popup had focus. */
     const focusAddress = (): void => {
       if (!state.sidebarVisible) setSidebarVisible(true);
+      window.focus();
       ui.webContents.focus();
       ui.webContents.send(IPC.focusAddress);
     };
@@ -156,22 +163,30 @@ function start(): void {
       pushState();
     };
 
+    /** A popup (sign-in, pop-out) that has focus: page shortcuts act on it, not on the main window's tab. */
+    const focusedPopup = (): BrowserWindow | null => {
+      const focused = BrowserWindow.getFocusedWindow();
+      return focused && !focused.isDestroyed() && isPopupWindow(focused) ? focused : null;
+    };
+    /** The page that ⌘R, ⌘P, zoom, DevTools, Back and Forward act on. */
+    const targetPage = (): WebContents | null => focusedPopup()?.webContents ?? tabs.activeWebContents();
+
     const zoom = (step: -1 | 0 | 1): void => {
-      const page = tabs.activeWebContents();
+      const page = targetPage();
       if (!page) return;
       const level = step === 0 ? 0 : page.getZoomLevel() + step * ZOOM_STEP;
       page.setZoomLevel(Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, level)));
     };
 
     const toggleDevTools = (): void => {
-      const page = tabs.activeWebContents();
+      const page = targetPage();
       if (!page) return;
       if (page.isDevToolsOpened()) page.closeDevTools();
       else page.openDevTools({ mode: 'detach' });
     };
 
     const print = (): void => {
-      tabs.activeWebContents()?.print({}, (ok, reason) => {
+      targetPage()?.print({}, (ok, reason) => {
         if (!ok && !/cancel/i.test(reason)) log(`print failed: ${reason}`);
       });
     };
@@ -183,29 +198,47 @@ function start(): void {
       },
       reopenClosedTab: () => tabs.reopenClosedTab(),
       closeTab: () => {
+        const popup = focusedPopup();
+        if (popup) {
+          popup.close(); // ⌘W closes the popup (its page may still say "Leave site?")
+          return;
+        }
         const id = tabs.snapshot().activeTabId;
         if (id !== null) tabs.closeTab(id);
       },
       openLocation: focusAddress,
       print,
+      // Popups have no find bar: find does nothing there rather than search the main window's tab.
       find: () => {
-        const page = tabs.activeWebContents();
+        const page = focusedPopup() ? null : tabs.activeWebContents();
         if (page) findBar.open(page);
       },
       findAgain: (forward) => {
-        const page = tabs.activeWebContents();
+        const page = focusedPopup() ? null : tabs.activeWebContents();
         if (page) findBar.findAgain(page, forward);
       },
       toggleSidebar: () => setSidebarVisible(!state.sidebarVisible),
       setShowNames,
-      reload: () => tabs.reload(),
+      reload: () => {
+        const popup = focusedPopup();
+        if (popup) popup.webContents.reload();
+        else tabs.reload();
+      },
       zoom,
       toggleDevTools,
-      back: () => tabs.back(),
-      forward: () => tabs.forward(),
+      back: () => {
+        const history = focusedPopup()?.webContents.navigationHistory;
+        if (!history) tabs.back();
+        else if (history.canGoBack()) history.goBack();
+      },
+      forward: () => {
+        const history = focusedPopup()?.webContents.navigationHistory;
+        if (!history) tabs.forward();
+        else if (history.canGoForward()) history.goForward();
+      },
       showProfile: (dir) => tabs.showProfile(dir),
-      importLogins: (mode) => void imports.importCurrent(mode),
-      importLoginsForAllProfiles: () => void imports.importAll(),
+      importLogins: (mode) => void imports.importCurrent(mode).catch(logFailure('importing logins')),
+      importLoginsForAllProfiles: () => void imports.importAll().catch(logFailure('importing logins')),
       openActiveProfileInChrome: () => {
         const dir = tabs.snapshot().dir;
         if (dir) openProfileInChrome(dir, log);
@@ -265,7 +298,15 @@ function start(): void {
       saveBounds();
     });
     window.on('move', saveBounds);
-    window.on('closed', () => { win = null; });
+    // Closing the window quits the app (⌘Q closes it too): every page stops now, popups go with it, tabs stay saved.
+    window.on('close', () => tabs.shutDown());
+    window.on('closed', () => {
+      win = null;
+      for (const other of BrowserWindow.getAllWindows()) {
+        if (isPopupWindow(other) && !other.isDestroyed()) other.destroy();
+      }
+      app.quit();
+    });
 
     rebuildMenu();
     const first = profiles.visible.find((p) => p.dir === state.activeProfile) ?? profiles.visible[0];
@@ -277,9 +318,9 @@ function start(): void {
       ui.webContents.once('did-finish-load', () => void imports.offerOnFirstRun(() => {
         state.firstRunDone = true;
         store.save(state);
-      }));
+      }).catch(logFailure('the first-run import offer')));
     }
-  });
+  }).catch(logFailure('starting'));
 }
 
 if (app.requestSingleInstanceLock()) start();

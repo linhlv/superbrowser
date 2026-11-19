@@ -85,6 +85,22 @@ export function popupWindowOptions(dir: string): {
   return { width: 520, height: 680, webPreferences: { partition: 'persist:' + dir, ...PAGE_WEB_PREFERENCES } };
 }
 
+/**
+ * A popup's window title: the host of the page it shows now (punycode for IDN hosts, as the URL API gives it;
+ * a blob: URL's origin host), then the page title and the profile — a page can't pose as another site or profile.
+ */
+export function popupTitle(url: string, pageTitle: string, profileName: string): string {
+  let host = '';
+  try {
+    const u = new URL(url);
+    host = u.protocol === 'blob:' ? new URL(u.pathname).host : u.host;
+  } catch {
+    // not a URL with a host: shown as is below
+  }
+  const where = host || url.slice(0, 100) || 'about:blank';
+  return `${where}${pageTitle ? ` — ${pageTitle}` : ''} (${profileName})`;
+}
+
 export type OpenDisposition = 'default' | 'foreground-tab' | 'background-tab' | 'new-window' | 'other';
 export type OpenTarget = { kind: 'tab'; activate: boolean } | { kind: 'popup' } | { kind: 'deny' };
 
