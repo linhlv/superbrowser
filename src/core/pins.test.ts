@@ -76,3 +76,47 @@ test('forgetUnpinned: drops keys no longer pinned, same map when none go', () =>
   const kept = new Map([['A|a.com', 1]]);
   assert.equal(forgetUnpinned(kept, ps), kept);
 });
+const big = 'data:image/png;base64,' + 'A'.repeat(65 * 1024);
+test('usableFavicon: accepts http(s) and short data:image, rejects other schemes and over 64 KB', () => {
+  assert.equal(usableFavicon('https://a.com/f.ico'), 'https://a.com/f.ico');
+  assert.equal(usableFavicon('http://a.com/f.ico'), 'http://a.com/f.ico');
+  assert.equal(usableFavicon('data:image/png;base64,AAAA'), 'data:image/png;base64,AAAA');
+  assert.equal(usableFavicon('javascript:alert(1)'), null);
+  assert.equal(usableFavicon('data:text/html,<b>x</b>'), null);
+  assert.equal(usableFavicon('file:///x.ico'), null);
+  assert.equal(usableFavicon(null), null);
+  assert.equal(usableFavicon(big), null);
+  const prefix = 'data:image/png;base64,';
+  const atLimit = prefix + 'A'.repeat(64 * 1024 - prefix.length);
+  assert.equal(atLimit.length, 64 * 1024);
+  assert.equal(usableFavicon(atLimit), atLimit);
+  assert.equal(usableFavicon(atLimit + 'A'), null);
+});
+test('decodePins: an oversize or bad-scheme favicon becomes null, the rest of the pin stays', () => {
+  for (const favicon of [big, 'javascript:1', 'data:text/html,x']) {
+    assert.deepEqual(decodePins([{ dir: 'A', url: 'https://a.com', title: 'T', favicon }]), [{ dir: 'A', url: 'https://a.com', title: 'T', favicon: null }]);
+  }
+});
+test('addPin: a bad favicon is stored as null, for a new pin and a re-pin', () => {
+  const fresh = addPin([], { dir: 'A', url: 'https://a.com', title: 'T', favicon: big });
+  assert.deepEqual(fresh, [{ dir: 'A', url: 'https://a.com', title: 'T', favicon: null }]);
+  const again = addPin([{ ...pin('A', 'https://a.com'), favicon: 'https://a.com/f.ico' }], { dir: 'A', url: 'https://a.com', title: 'T2', favicon: 'javascript:1' });
+  assert.equal(again[0]!.favicon, null);
+  assert.equal(again[0]!.title, 'T2');
+});
+test('withFavicon: an oversize or bad-scheme favicon leaves the same array', () => {
+  const ps = [{ ...pin('A', 'https://a.com'), favicon: 'https://a.com/f.ico' }];
+  assert.equal(withFavicon(ps, 'A|a.com', big), ps);
+  assert.equal(withFavicon(ps, 'A|a.com', 'javascript:1'), ps);
+  assert.equal(withFavicon(ps, 'A|a.com', 'file:///x.ico'), ps);
+});
+test('withTitle: unchanged or empty gives the same array; a change touches only that pin', () => {
+  const ps = [{ ...pin('A', 'https://a.com'), title: 'Old' }, pin('B', 'https://b.com', 'Other')];
+  assert.equal(withTitle(ps, 'A|a.com', 'Old'), ps);
+  assert.equal(withTitle(ps, 'A|a.com', ''), ps);
+  const out = withTitle(ps, 'A|a.com', 'New');
+  assert.notEqual(out, ps);
+  assert.equal(out[0]!.title, 'New');
+  assert.equal(out[1], ps[1]);
+  assert.equal(ps[0]!.title, 'Old');
+});
