@@ -48,16 +48,17 @@ export function profileSession(dir: string): Session {
   if (!context) throw new Error('configureSessions() must run before profileSession()');
 
   const s = session.fromPartition('persist:' + dir);
-  const major = chromeMajor(process.versions.chrome);
-  s.setUserAgent(userAgent(major));
+  const chromeVersion = process.versions.chrome;
+  s.setUserAgent(userAgent(chromeMajor(chromeVersion)));
   s.webRequest.onBeforeSendHeaders((details, callback) => {
-    callback({ requestHeaders: rewriteClientHints(details.requestHeaders, major) });
+    callback({ requestHeaders: rewriteClientHints(details.requestHeaders, chromeVersion) });
   });
   installPermissionHandlers(s, dir);
   // Popups and background profiles included: every download of this profile is saved and listed.
   s.on('will-download', (_e, item) => downloads?.track(item, dir));
-  // dist/main.cjs → dist/preload/frame.cjs: passkey requests fail fast in every frame (see pageWebPreferences).
-  s.registerPreloadScript({ type: 'frame', id: 'superbrowser-passkey', filePath: path.join(__dirname, 'preload', 'frame.cjs') });
+  // dist/main.cjs → dist/preload/frame.cjs, in every frame (see pageWebPreferences): passkey requests fail fast,
+  // and navigator.userAgentData names Google Chrome like the headers above.
+  s.registerPreloadScript({ type: 'frame', id: 'superbrowser-frame', filePath: path.join(__dirname, 'preload', 'frame.cjs') });
   sessions.set(dir, s);
   context.log(`session ready for profile ${dir}`);
   return s;

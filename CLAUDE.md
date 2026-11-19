@@ -38,7 +38,7 @@ scripts/make-icon.sh              # resources/Superbrowser.png → resources/ico
   - `menu.ts`: the application menu and every shortcut. It is the source of truth for shortcuts.
   - `chrome.ts`: reads Chrome's `Local State`; opens a profile in Chrome.
   - `downloads.ts`.
-- **`src/preload/`**: `ui.ts` (contextBridge API for our UI pages) and `frame.ts` (per-session frame preload that makes passkey requests fail fast).
+- **`src/preload/`**: `ui.ts` (contextBridge API for our UI pages) and `frame.ts` (per-session frame preload: passkey requests fail fast, `navigator.userAgentData` names Google Chrome).
 - **`src/ui/`**: the sidebar + bottom bar page (`index.html`, `ui.ts`) and the find bar (`find.html`, `find.ts`). Our own pages; CSP forbids inline styles/scripts.
 - **`src/shared/types.ts`**: types and IPC channel names shared by main, preload and UI.
 
@@ -60,7 +60,7 @@ Popups are separate small windows. Closing the main window quits. ⌘W never clo
   - Popups use `popupWindowOptions(dir)` (partition plus `PAGE_WEB_PREFERENCES`).
   - `windowOpenTarget` decides tab, popup or deny: `blob:` opens as a popup, and anything but http(s), `blob:` and `about:blank` is denied.
 - **Pages get no privileged API.**
-  - `src/preload/frame.ts` is registered per profile session. It runs in subframes because page views set `nodeIntegrationInSubFrames` (sandboxed, so pages still get no Node). It must never expose an API, IPC or `contextBridge.exposeInMainWorld` to pages. It only wraps `navigator.credentials` via `executeInMainWorld`.
+  - `src/preload/frame.ts` is registered per profile session. It runs in subframes because page views set `nodeIntegrationInSubFrames` (sandboxed, so pages still get no Node). It must never expose an API, IPC or `contextBridge.exposeInMainWorld` to pages. It only wraps `navigator.credentials` and `NavigatorUAData` via `executeInMainWorld`; the functions it runs there are serialized, so they use only their arguments (no module scope).
   - UI commands are listened for only on the UI and find views' own `webContents.ipc`, and validated by `parseUiCommand`. The find view only accepts find commands.
   - Any `ipcMain` handler you add must reject senders that aren't the app's UI or find views.
 - **Chrome data is read-only.**
@@ -73,7 +73,7 @@ Popups are separate small windows. Closing the main window quits. ⌘W never clo
   - Prompts are tied to their tab: one pending prompt per tab, and a prompt from a page that navigated or closed is dropped.
 - **Browser identity:**
   - UA `… Chrome/<major>.0.0.0 Safari/537.36`.
-  - `Sec-CH-UA` brands `"Google Chrome"`, `"Chromium"` and `"Not_A Brand"`.
+  - Client hints add `"Google Chrome"` to Electron's own brand list (`withChromeBrand`): Electron's GREASE brand and `"Chromium"` are kept, and the three take the order Chrome of that major uses. `Sec-CH-UA` gets `v="<major>"`, `Sec-CH-UA-Full-Version-List` the full version. The frame preload gives `navigator.userAgentData` (`brands`, `getHighEntropyValues`, `toJSON`) the same list. Never hard-code a brand list.
   - `<major>` is the major of `process.versions.chrome`.
   - Never automate sign-in.
 - **Profiles from Chrome:** a missing, unreadable or mid-write `Local State` (empty `info_cache`) keeps the profiles already known (`mergeProfiles`). Profiles deleted in Chrome stay until hidden. The bar is never empty.
