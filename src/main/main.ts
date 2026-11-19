@@ -4,6 +4,7 @@ import { chromeMajor, userAgent } from '../core/identity.ts';
 import { mergeProfiles } from '../core/profiles.ts';
 import { createStore } from '../core/store.ts';
 import { sameSavedTabs } from '../core/tabs.ts';
+import { downloadsOf } from '../core/downloads.ts';
 import { barProfiles, parseUiCommand } from '../core/uiProtocol.ts';
 import { IPC, type DownloadState, type UiCommand, type UiState } from '../shared/types.ts';
 import { createBrowserWindow, createUiView, FindBar, layoutWindow } from './browserWindow.ts';
@@ -94,7 +95,7 @@ function start(): void {
         canGoForward: snap.canGoForward,
         sidebarVisible: state.sidebarVisible,
         showNames: state.showNames,
-        downloads,
+        downloads: downloadsOf(downloads, snap.dir), // other profiles' file names stay out of view (screen sharing)
       };
       ui.webContents.send(IPC.state, uiState);
     };

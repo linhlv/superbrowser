@@ -19,9 +19,9 @@ export type DownloadsContext = {
 const PUSH_INTERVAL_MS = 250;
 
 /**
- * Every profile's downloads: saved without asking into the downloads folder under a unique name, listed
- * in the sidebar (the newest 20 of this run, from all profiles, hidden ones included), with a notification
- * naming the profile when one completes.
+ * Every profile's downloads: saved without asking into the downloads folder under a unique name, kept in
+ * one list (each profile's newest 20 of this run, hidden profiles included; the sidebar shows the shown
+ * profile's), with a notification naming the profile when one completes.
  */
 export class Downloads {
   private readonly ctx: DownloadsContext;
@@ -42,7 +42,7 @@ export class Downloads {
     const id = randomUUID();
     const filename = path.basename(savePath);
     const snapshot = (): DownloadState => ({
-      id, filename, path: savePath, state: item.getState(), received: item.getReceivedBytes(), total: item.getTotalBytes(),
+      id, dir, filename, path: savePath, state: item.getState(), received: item.getReceivedBytes(), total: item.getTotalBytes(),
     });
     this.ctx.log(`downloading ${item.getURL().slice(0, 200)} to ${savePath} (profile ${dir})`);
     this.record(snapshot(), true);
@@ -55,7 +55,7 @@ export class Downloads {
     });
   }
 
-  /** Shows a listed download in Finder; ids not in the list (unknown, or older than the newest 20) are ignored. */
+  /** Shows a listed download in Finder; ids not in the list (unknown, or older than its profile's newest 20) are ignored. */
   reveal(id: string): void {
     const d = this.list.find((x) => x.id === id);
     if (!d) {

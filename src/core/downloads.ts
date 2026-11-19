@@ -1,7 +1,7 @@
 import path from 'node:path';
 import type { DownloadState } from '../shared/types.ts';
 
-/** Downloads listed in the sidebar: the newest of this app run (the list is not saved). */
+/** Downloads listed in the sidebar: each profile's newest of this app run (the list is not saved). */
 export const MAX_DOWNLOADS = 20;
 const MAX_NAME = 200;
 const FALLBACK = 'download';
@@ -40,9 +40,18 @@ function splitExtension(name: string): { base: string; ext: string } {
   return dot > 0 ? { base: name.slice(0, dot), ext: name.slice(dot) } : { base: name, ext: '' };
 }
 
-/** Replaces the download with the same id in place, or appends it; keeps the newest `MAX_DOWNLOADS`. */
+/** Replaces the download with the same id in place, or appends it; keeps each profile's newest `MAX_DOWNLOADS`. */
 export function recordDownload(list: readonly DownloadState[], d: DownloadState): DownloadState[] {
   const i = list.findIndex((x) => x.id === d.id);
   if (i !== -1) return list.map((x, j) => (j === i ? d : x));
-  return [...list, d].slice(-MAX_DOWNLOADS);
+  const next = [...list, d];
+  const own = next.filter((x) => x.dir === d.dir);
+  if (own.length <= MAX_DOWNLOADS) return next;
+  const oldest = own[0]!;
+  return next.filter((x) => x !== oldest);
+}
+
+/** The sidebar shows only the shown profile's downloads, so other profiles' file names stay private (e.g. in a shared screen). */
+export function downloadsOf(list: readonly DownloadState[], dir: string): DownloadState[] {
+  return list.filter((x) => x.dir === dir);
 }

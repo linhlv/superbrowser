@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { recordDownload, safeFilename, uniqueDownloadPath, MAX_DOWNLOADS } from './downloads.ts';
+import { downloadsOf, recordDownload, safeFilename, uniqueDownloadPath, MAX_DOWNLOADS } from './downloads.ts';
 import type { DownloadState } from '../shared/types.ts';
 
 const DIR = '/Users/me/Downloads';
@@ -51,8 +51,8 @@ test('safeFilename: very long names are cut, keeping the extension', () => {
   assert.ok(name.endsWith('x.pdf'));
 });
 
-const d = (id: string, state: DownloadState['state'] = 'progressing'): DownloadState =>
-  ({ id, filename: `${id}.bin`, path: `${DIR}/${id}.bin`, state, received: 0, total: 10 });
+const d = (id: string, state: DownloadState['state'] = 'progressing', dir = 'P1'): DownloadState =>
+  ({ id, dir, filename: `${id}.bin`, path: `${DIR}/${id}.bin`, state, received: 0, total: 10 });
 
 test('recordDownload: appends new, replaces known in place, never mutates', () => {
   const l0: DownloadState[] = [];
@@ -65,11 +65,25 @@ test('recordDownload: appends new, replaces known in place, never mutates', () =
   assert.deepEqual(l0, []);
 });
 
-test('recordDownload: keeps the newest MAX_DOWNLOADS (20)', () => {
+test('recordDownload: keeps the newest MAX_DOWNLOADS (20) of each profile', () => {
   assert.equal(MAX_DOWNLOADS, 20);
   let list: DownloadState[] = [];
   for (let i = 0; i < 25; i++) list = recordDownload(list, d(`d${i}`));
   assert.equal(list.length, 20);
   assert.equal(list[0]!.id, 'd5');
   assert.equal(list.at(-1)!.id, 'd24');
+});
+
+test('recordDownload: one profile\'s downloads never push out another\'s', () => {
+  let list: DownloadState[] = [d('other', 'completed', 'P2')];
+  for (let i = 0; i < 25; i++) list = recordDownload(list, d(`d${i}`));
+  assert.deepEqual(downloadsOf(list, 'P2').map((x) => x.id), ['other']);
+  assert.equal(downloadsOf(list, 'P1').length, 20);
+});
+
+test('downloadsOf: only the given profile\'s downloads, in order', () => {
+  const list = [d('a', 'completed', 'P1'), d('b', 'completed', 'P2'), d('c', 'progressing', 'P1')];
+  assert.deepEqual(downloadsOf(list, 'P1').map((x) => x.id), ['a', 'c']);
+  assert.deepEqual(downloadsOf(list, 'P2').map((x) => x.id), ['b']);
+  assert.deepEqual(downloadsOf(list, ''), []);
 });
