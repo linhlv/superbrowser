@@ -150,6 +150,10 @@ function start(): void {
       activeProfile: () => profiles.visible.find((p) => p.dir === tabs.snapshot().dir) ?? null,
       visibleProfiles: () => profiles.visible,
       reloadProfile: (dir) => tabs.reloadProfile(dir),
+      library,
+      libraryChanged: () => {
+        if (!ui.webContents.isDestroyed()) ui.webContents.send(IPC.libraryChanged);
+      },
     });
     const relayout = () => layoutWindow(window, ui, findBar, tabs, state.sidebarVisible);
     relayout();
@@ -253,6 +257,7 @@ function start(): void {
       showProfile: (dir) => tabs.showProfile(dir),
       importLogins: (mode) => void imports.importCurrent(mode).catch(logFailure('importing logins')),
       importLoginsForAllProfiles: () => void imports.importAll().catch(logFailure('importing logins')),
+      importLibrary: () => void imports.importLibraryAll().catch(logFailure('importing bookmarks and history')),
       openActiveProfileInChrome: () => {
         const dir = tabs.snapshot().dir;
         if (dir) openProfileInChrome(dir, log);
@@ -277,6 +282,7 @@ function start(): void {
           buildAddProfileMenu({
             importLogins: () => menuActions.importLogins('add'),
             importLoginsForAllProfiles: () => menuActions.importLoginsForAllProfiles(),
+            importLibrary: () => menuActions.importLibrary(),
             newProfileInChrome: () => newProfileInChrome(log),
           }).popup({ window });
           break;

@@ -29,6 +29,8 @@ export type MenuContext = {
   /** Copy the shown profile's logins from Chrome: 'add' keeps the session's cookies, 'replace' (confirmed) overwrites. */
   importLogins(mode: ImportMode): void;
   importLoginsForAllProfiles(): void;
+  /** Copy every visible profile's bookmarks and history from Chrome (add-only; no Keychain, no cookies). */
+  importLibrary(): void;
   openActiveProfileInChrome(): void;
   unhideProfile(dir: string): void;
   /** 1–8 select by position, 9 the last tab. */
@@ -122,6 +124,7 @@ export function buildMenu(ctx: MenuContext): Menu {
         sep,
         { label: 'Import Logins from Chrome', click: () => ctx.importLogins('add') },
         { label: 'Import Logins for All Profiles', click: () => ctx.importLoginsForAllProfiles() },
+        { label: 'Import Bookmarks and History from Chrome', click: () => ctx.importLibrary() },
         { label: 'Replace Logins from Chrome…', click: () => ctx.importLogins('replace') },
         sep,
         { label: 'Open This Profile in Chrome', click: () => ctx.openActiveProfileInChrome() },
@@ -136,10 +139,11 @@ export function buildMenu(ctx: MenuContext): Menu {
   ]);
 }
 
-/** The "+" button's menu: bring logins in, or create a profile. */
+/** The "+" button's menu: bring logins, bookmarks and history in, or create a profile. */
 export type AddProfileMenuContext = {
   importLogins(): void;
   importLoginsForAllProfiles(): void;
+  importLibrary(): void;
   newProfileInChrome(): void;
 };
 
@@ -147,6 +151,7 @@ export function buildAddProfileMenu(ctx: AddProfileMenuContext): Menu {
   return Menu.buildFromTemplate([
     { label: 'Import Logins from Chrome', click: () => ctx.importLogins() },
     { label: 'Import Logins for All Profiles', click: () => ctx.importLoginsForAllProfiles() },
+    { label: 'Import Bookmarks and History from Chrome', click: () => ctx.importLibrary() },
     { type: 'separator' },
     { label: 'New Profile in Chrome…', click: () => ctx.newProfileInChrome() },
   ]);
