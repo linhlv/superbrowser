@@ -185,7 +185,10 @@ export function ancestorFolders(nodes: BookmarkNode[], id: number): number[] | n
 /**
  * Add-only merge of Chrome's bookmark files. Imported items are appended to the end of their
  * folder in Chrome order. A URL already anywhere in the tree (or seen earlier in this import) is
- * skipped and counted, as is a non-web URL. Folders are reused by name path.
+ * skipped and counted, as is a non-web URL. Folders are reused by name path; a folder that isn't
+ * there yet (a Chrome folder, or the Other/Mobile Bookmarks wrapper) is created only when at least
+ * one bookmark is added inside it, so empty Chrome folders aren't imported and re-importing doesn't
+ * bring back a folder the user renamed or deleted.
  */
 export function mergeChrome(tree: BookmarkTree, files: ChromeBookmarks[], now: number): { tree: BookmarkTree; added: number; skipped: number } {
   const work = structuredClone(tree);
@@ -193,17 +196,18 @@ export function mergeChrome(tree: BookmarkTree, files: ChromeBookmarks[], now: n
   let added = 0;
   let skipped = 0;
 
-  const folderIn = (list: BookmarkNode[], title: string, addedAt: number): Folder => {
-    const hit = list.find((n): n is Folder => n.kind === 'folder' && n.title === title);
-    if (hit) return hit;
-    const node: Folder = { id: work.nextId++, kind: 'folder', title, added: addedAt, children: [] };
-    list.push(node);
-    return node;
+  const importFolder = (list: BookmarkNode[], title: string, addedAt: number, items: ChromeNode[]) => {
+    const existing = list.find((n): n is Folder => n.kind === 'folder' && n.title === title);
+    if (existing) { importInto(existing.children, items); return; }
+    const before = added;
+    const children: BookmarkNode[] = [];
+    importInto(children, items);
+    if (added > before) list.push({ id: work.nextId++, kind: 'folder', title, added: addedAt, children });
   };
   const importInto = (list: BookmarkNode[], items: ChromeNode[]) => {
     for (const item of items) {
       if (item.kind === 'folder') {
-        importInto(folderIn(list, item.title, item.added || now).children, item.children);
+        importFolder(list, item.title, item.added || now, item.children);
       } else if (!isWebUrl(item.url) || seen.has(item.url)) {
         skipped++;
       } else {
@@ -213,20 +217,10 @@ export function mergeChrome(tree: BookmarkTree, files: ChromeBookmarks[], now: n
       }
     }
   };
-  // A wrapper folder is created only when something is actually added inside it.
-  const importWrapper = (title: string, items: ChromeNode[]) => {
-    if (!items.length) return;
-    const existing = work.nodes.find((n): n is Folder => n.kind === 'folder' && n.title === title);
-    if (existing) { importInto(existing.children, items); return; }
-    const before = added;
-    const children: BookmarkNode[] = [];
-    importInto(children, items);
-    if (added > before) work.nodes.push({ id: work.nextId++, kind: 'folder', title, added: now, children });
-  };
   for (const f of files) {
     importInto(work.nodes, f.bar);
-    importWrapper('Other Bookmarks', f.other);
-    importWrapper('Mobile Bookmarks', f.mobile);
+    importFolder(work.nodes, 'Other Bookmarks', now, f.other);
+    importFolder(work.nodes, 'Mobile Bookmarks', now, f.mobile);
   }
   return { tree: work, added, skipped };
 }

@@ -181,7 +181,8 @@ test('mergeChrome appends in Chrome order and reuses folders by name path', () =
   const d = findNode(r.tree, daily)!.node;
   assert.equal(d.kind, 'folder');
   if (d.kind !== 'folder') return;
-  assert.deepEqual(titles(d.children).slice(-2), ['N1', 'Empty']);
+  assert.equal(titles(d.children).at(-1), 'N1');
+  assert.ok(!titles(d.children).includes('Empty'), 'an empty Chrome folder is not imported');
   const reports = d.children.find((c) => c.title === 'Reports')!;
   assert.deepEqual(reports.kind === 'folder' && titles(reports.children), ['Weekly', 'N2']);
   assert.equal(r.tree.nodes.filter((n) => n.title === 'Daily').length, 1);
@@ -221,7 +222,7 @@ test('mergeChrome skips and counts non-web URLs', () => {
   const r = mergeChrome(emptyTree(), [chrome({ bar: [cu('JS', 'javascript:void 0'), cu('Settings', 'chrome://settings'), cu('OK', 'https://ok.test/'), cf('F', cu('File', 'file:///x'))] })], T0);
   assert.equal(r.added, 1);
   assert.equal(r.skipped, 3);
-  assert.deepEqual(titles(r.tree.nodes), ['OK', 'F']);
+  assert.deepEqual(titles(r.tree.nodes), ['OK']); // F would hold only a skipped bookmark
 });
 
 test('mergeChrome creates a wrapper folder only when it adds something inside it', () => {
@@ -238,4 +239,17 @@ test('mergeChrome creates a wrapper folder only when it adds something inside it
   // all-duplicate content on a fresh tree leaves no empty wrapper either
   const dup = mergeChrome(addBookmark(emptyTree(), { title: 'O', url: 'https://o.test/' }, T0).tree, [chrome({ other: [cu('O', 'https://o.test/')] })], T0);
   assert.deepEqual(titles(dup.tree.nodes), ['O']);
+});
+
+test('mergeChrome creates a Chrome folder only when it adds something inside it', () => {
+  const file = chrome({ bar: [cf('Work', cu('C', 'https://c.test/'), cf('Deep', cu('D', 'https://d.test/'))), cf('Empty', cf('Nested'))] });
+  const once = mergeChrome(emptyTree(), [file], T0);
+  assert.deepEqual(titles(once.tree.nodes), ['Work']);
+  // the user renames "Work" to "Clients"
+  const t = renameNode(once.tree, once.tree.nodes[0]!.id, 'Clients');
+  const again = mergeChrome(t, [file], T0);
+  assert.equal(again.added, 0);
+  assert.equal(again.skipped, 2);
+  assert.deepEqual(again.tree, t);
+  assert.deepEqual(titles(again.tree.nodes), ['Clients']);
 });
