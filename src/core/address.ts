@@ -3,6 +3,11 @@ const LOCALHOST = /^localhost(?::\d+)?(?:[/?#].*)?$/i;
 const IPV4 = /^\d{1,3}(?:\.\d{1,3}){3}(?::\d+)?(?:[/?#].*)?$/;
 const DOMAIN = /^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,}(?::\d+)?(?:[/?#].*)?$/i;
 
+/** The Google search URL for `text`, whatever it looks like. */
+export function googleSearchUrl(text: string): string {
+  return `https://www.google.com/search?q=${encodeURIComponent(text.trim())}`;
+}
+
 export function toNavigableUrl(input: string): string | null {
   const text = input.trim();
   if (text === '') return null;
@@ -11,7 +16,7 @@ export function toNavigableUrl(input: string): string | null {
     if (LOCALHOST.test(text) || IPV4.test(text)) return `http://${text}`;
     if (DOMAIN.test(text)) return `https://${text}`;
   }
-  return `https://www.google.com/search?q=${encodeURIComponent(text)}`;
+  return googleSearchUrl(text);
 }
 
 /** True for http(s) URLs that `new URL` parses (the only ones bookmarks and history store). */

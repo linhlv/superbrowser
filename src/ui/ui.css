@@ -91,3 +91,14 @@ body:not(.names) .pf.on:not(:hover) { background: none; box-shadow: none; }
 body.names .pf, .pf:hover { padding: 0 10px 0 6px; }
 body.names .pf .n, .pf:hover .n { max-width: 150px; opacity: 1; margin-left: 6px; }
 .pf:hover .k { max-width: 30px; opacity: .5; margin-left: 6px; }
+
+/* Address suggestions: a card under the field, within the sidebar's inner width (never over the page) */
+#suggest { position: absolute; left: 10px; right: 10px; top: 84px; z-index: 5; padding: 4px; border-radius: 10px; background: #fff; color: #111; box-shadow: 0 8px 24px rgba(0,0,0,.35); }
+#suggest[hidden] { display: none; }
+.sg { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 7px; }
+.sg.on { background: rgba(10,132,255,.14); }
+.sg .icon { width: 16px; height: 16px; border-radius: 3px; flex: none; background: rgba(127,127,127,.4); }
+.sg-t { flex: 1; min-width: 0; }
+.sg-title, .sg-url { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sg-url { font-size: 11px; color: #666; }
+.sg-star { flex: none; color: #e8a400; }
