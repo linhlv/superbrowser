@@ -3,7 +3,7 @@ import type { BookmarkNode, LibraryReply } from '../../shared/types.ts';
 import { ancestorFolders, searchBookmarks } from '../../core/bookmarks.ts';
 import { el, faviconIcon as icon } from './dom.ts';
 import { icon as lineIcon } from './icons.ts';
-import { blurWithin, emptyRow, escClearsSearch, opensOnClick, row, type SectionHandle } from './libraryRows.ts';
+import { blurWithin, emptyRow, escClearsSearch, opensOnClick, row, setupRoving, type SectionHandle } from './libraryRows.ts';
 
 /**
  * The sidebar's Bookmarks section: the folder tree, a flat search, highlight/reveal, rename in place, row menus.
@@ -14,6 +14,7 @@ export function setupBookmarksSection(opts: { sb: SuperbrowserApi; root: HTMLEle
   const { sb, root } = opts;
   const search = root.querySelector('.sec-search') as HTMLInputElement;
   const list = root.querySelector('.sec-list') as HTMLElement;
+  const roving = setupRoving(list);
   let open = false;
   let seq = 0;
   let nodes: BookmarkNode[] | null = null; // the whole tree, once loaded
@@ -27,6 +28,7 @@ export function setupBookmarksSection(opts: { sb: SuperbrowserApi; root: HTMLEle
 
   function bookmarkRow(r: HTMLElement, id: number, title: string): HTMLElement {
     rows.set(id, { row: r, title });
+    r.dataset['key'] = String(id);
     if (id === highlight) r.classList.add('hl');
     r.addEventListener('contextmenu', (e) => {
       e.preventDefault();
@@ -56,6 +58,7 @@ export function setupBookmarksSection(opts: { sb: SuperbrowserApi; root: HTMLEle
       kids.hidden = !isOpen();
       r.classList.toggle('open', isOpen());
       r.setAttribute('aria-expanded', String(isOpen()));
+      roving.normalize(); // the Tab stop may have been inside the folder that just closed
     });
     const wrap = el('div', 'bm-folder');
     wrap.append(r, kids);
@@ -63,6 +66,10 @@ export function setupBookmarksSection(opts: { sb: SuperbrowserApi; root: HTMLEle
   }
 
   function render(): void {
+    roving.update(renderRows);
+  }
+
+  function renderRows(): void {
     const carry = editing ? { id: editing.id, value: editing.input.value } : null;
     editing = null; // the input is about to go; its blur must not count as a cancel
     rows.clear();

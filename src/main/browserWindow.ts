@@ -82,6 +82,14 @@ export class Toolbar {
     this.layout(this.sidebarVisible);
   }
 
+  /**
+   * Where a point in this view lands on the page below it (same left edge; the page starts `TOP_H` lower), or null if
+   * it is on the strip itself.
+   */
+  toPage(x: number, y: number): { x: number; y: number } | null {
+    return y >= TOP_H ? { x, y: y - TOP_H } : null;
+  }
+
   /** A page in HTML full screen covers the strip; hidden meanwhile so its drag region can't catch clicks on the page. */
   setPageFullScreen(on: boolean): void {
     this.view.setVisible(!on);

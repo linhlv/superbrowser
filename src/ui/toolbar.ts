@@ -46,6 +46,13 @@ const suggestions = setupSuggestions({ address, list, sb, currentUrl: () => curr
 sb.onFocusAddress(() => { address.focus(); address.select(); });
 sb.onLibrary((r) => { if (r.kind === 'suggestions') suggestions.onReply(r); });
 
+// While the card is open the view covers part of the page, transparent except the strip and the card. A left press on
+// that transparent part closes the card (the field's blur does) and is passed on to the page, as in Chrome.
+document.addEventListener('mousedown', (e) => {
+  if (e.button !== 0 || (e.target !== document.body && e.target !== document.documentElement)) return;
+  sb.send({ type: 'toolbarClickThrough', x: Math.round(e.clientX), y: Math.round(e.clientY) });
+});
+
 backBtn.addEventListener('click', () => sb.send({ type: 'back' }));
 forwardBtn.addEventListener('click', () => sb.send({ type: 'forward' }));
 reloadBtn.addEventListener('click', () => sb.send({ type: 'reload' }));

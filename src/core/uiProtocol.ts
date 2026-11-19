@@ -95,6 +95,11 @@ export function parseUiCommand(raw: unknown, knownDirs: ReadonlySet<string>): Ui
       const height = raw['height'];
       return Number.isInteger(height) && (height as number) >= 0 && (height as number) <= 4000 ? { type, height: height as number } : null;
     }
+    case 'toolbarClickThrough': {
+      const { x, y } = raw;
+      const px = (v: unknown): v is number => Number.isInteger(v) && (v as number) >= 0 && (v as number) <= 10000;
+      return px(x) && px(y) ? { type, x, y } : null;
+    }
     case 'addProfileMenu':
     case 'newTab':
     case 'back':

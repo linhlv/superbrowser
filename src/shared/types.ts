@@ -35,7 +35,9 @@ export type UiCommand =
   | { type: 'tabMenu'; id: number } | { type: 'setDisplayName'; dir: string; name: string }
   | { type: 'setSectionOpen'; section: Section; open: boolean }
   /** The toolbar view's height: the strip, or taller while the address suggestions are open. */
-  | { type: 'toolbarHeight'; height: number };
+  | { type: 'toolbarHeight'; height: number }
+  /** A left click on the toolbar's transparent part over the page (suggestions open), in the toolbar's coordinates. */
+  | { type: 'toolbarClickThrough'; x: number; y: number };
 export type Suggestion = { url: string; title: string; bookmarked: boolean };
 export type HistoryRow = { url: string; title: string; time: number; day: number; favicon: string | null };
 export type BookmarkNode =

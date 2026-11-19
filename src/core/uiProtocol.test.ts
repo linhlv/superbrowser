@@ -68,6 +68,7 @@ test('parseUiCommand: accepts every well-formed command and keeps only its field
     { type: 'setSectionOpen', section: 'bookmarks', open: false },
     { type: 'toolbarHeight', height: 44 },
     { type: 'toolbarHeight', height: 412 },
+    { type: 'toolbarClickThrough', x: 40, y: 70 },
   ];
   for (const c of cases) assert.deepEqual(parseUiCommand(c, known), c);
   assert.deepEqual(parseUiCommand({ type: 'back', extra: 'x' }, known), { type: 'back' });
@@ -153,5 +154,11 @@ test('parseUiCommand: rejects bad pin and display-name commands', () => {
 test('parseUiCommand: toolbarHeight needs a whole number of pixels within 0–4000', () => {
   for (const height of [-1, 4001, 1.5, NaN, '300', null, undefined]) {
     assert.equal(parseUiCommand({ type: 'toolbarHeight', height }, known), null, String(height));
+  }
+});
+
+test('parseUiCommand: toolbarClickThrough needs whole-pixel coordinates within 0–10000', () => {
+  for (const [x, y] of [[-1, 5], [5, -1], [10001, 5], [1.5, 5], ['5', 5], [5, null]]) {
+    assert.equal(parseUiCommand({ type: 'toolbarClickThrough', x, y }, known), null, `${x},${y}`);
   }
 });

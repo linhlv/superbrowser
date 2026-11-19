@@ -635,6 +635,17 @@ function start(): void {
           toUi(IPC.library, libraryReply(cmd));
           break;
         case 'toolbarHeight': toolbar.setHeight(cmd.height); break;
+        case 'toolbarClickThrough': {
+          // The card is closing (its field just lost focus); the press goes to the page under it, as a click.
+          const at = toolbar.toPage(cmd.x, cmd.y);
+          const page = tabs.activeWebContents();
+          toolbar.setHeight(0);
+          if (!at || !page) break;
+          page.focus();
+          page.sendInputEvent({ type: 'mouseDown', x: at.x, y: at.y, button: 'left', clickCount: 1 });
+          page.sendInputEvent({ type: 'mouseUp', x: at.x, y: at.y, button: 'left', clickCount: 1 });
+          break;
+        }
         case 'openUrl':
           if (cmd.newTab) tabs.newTab(cmd.url);
           else tabs.navigate(cmd.url);
@@ -672,7 +683,7 @@ function start(): void {
     };
     const isFind = (cmd: UiCommand) => cmd.type === 'find' || cmd.type === 'findClose';
     /** Only the toolbar sends these; it also sends back, forward and reload, which the sidebar's menus don't need. */
-    const toolbarOnly = new Set<UiCommand['type']>(['navigate', 'suggest', 'toolbarHeight']);
+    const toolbarOnly = new Set<UiCommand['type']>(['navigate', 'suggest', 'toolbarHeight', 'toolbarClickThrough']);
     const isToolbar = (cmd: UiCommand) => toolbarOnly.has(cmd.type) || cmd.type === 'back' || cmd.type === 'forward' || cmd.type === 'reload';
     listen(ui, (cmd) => !isFind(cmd) && !toolbarOnly.has(cmd.type));
     listen(toolbar.view, isToolbar);

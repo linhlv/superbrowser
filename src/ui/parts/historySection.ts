@@ -2,7 +2,7 @@ import type { SuperbrowserApi } from '../../preload/ui.ts';
 import type { HistoryRow, LibraryReply } from '../../shared/types.ts';
 import { dayLabel, dayOf } from '../../core/searchText.ts';
 import { el, faviconIcon as icon } from './dom.ts';
-import { blurWithin, clock, emptyRow, escClearsSearch, formatDay, host, opensOnClick, row, type SectionHandle } from './libraryRows.ts';
+import { blurWithin, clock, emptyRow, escClearsSearch, formatDay, host, opensOnClick, row, setupRoving, type SectionHandle } from './libraryRows.ts';
 
 const LOAD_MORE_WITHIN_PX = 200;
 const SEARCH_DELAY_MS = 150;
@@ -18,6 +18,7 @@ export function setupHistorySection(opts: { sb: SuperbrowserApi; root: HTMLEleme
   const { sb, root } = opts;
   const search = root.querySelector('.sec-search') as HTMLInputElement;
   const list = root.querySelector('.sec-list') as HTMLElement;
+  const roving = setupRoving(list);
   let open = false;
   let searchTimer: ReturnType<typeof setTimeout> | undefined;
   let seq = 0;
@@ -42,6 +43,7 @@ export function setupHistorySection(opts: { sb: SuperbrowserApi; root: HTMLEleme
     const where = host(h.url);
     const r = row(icon(h.favicon), h.title || h.url, where ? `${clock(h.time)} · ${where}` : clock(h.time));
     opensOnClick(sb, r, h.url);
+    r.dataset['key'] = `${h.time}|${h.url}`; // a visit: the same row after a refetch
     r.addEventListener('contextmenu', (e) => {
       e.preventDefault();
       sb.send({ type: 'historyMenu', url: h.url });
@@ -50,6 +52,11 @@ export function setupHistorySection(opts: { sb: SuperbrowserApi; root: HTMLEleme
   }
 
   function onPage(r: Extract<LibraryReply, { kind: 'historyPage' }>): void {
+    roving.update(() => showPage(r));
+    loadMoreIfNear();
+  }
+
+  function showPage(r: Extract<LibraryReply, { kind: 'historyPage' }>): void {
     loading = false;
     more = r.more;
     if (!appending) {
@@ -68,7 +75,6 @@ export function setupHistorySection(opts: { sb: SuperbrowserApi; root: HTMLEleme
       lastTime = h.time;
     }
     list.append(add);
-    loadMoreIfNear();
   }
 
   function loadMoreIfNear(): void {
