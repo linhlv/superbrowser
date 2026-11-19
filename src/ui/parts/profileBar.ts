@@ -45,7 +45,8 @@ export function setupProfileBar(opts: { bar: HTMLElement; sb: SuperbrowserApi })
   let editing: Edit | null = null;
   const profileDrag = setupProfileDrag({ bar, send: (cmd) => sb.send(cmd) });
 
-  // Whether a pointer is pressed in this page, and what waits for its release.
+  // Whether the primary button is pressed in this page, and what waits for its release. Only the primary button
+  // counts: a right-click opens a native menu that swallows its release, which would leave the flag stuck.
   let pressing = false;
   let afterPress: (() => void)[] = [];
   const released = (): void => {
@@ -54,7 +55,7 @@ export function setupProfileBar(opts: { bar: HTMLElement; sb: SuperbrowserApi })
     afterPress = [];
     if (run.length > 0) setTimeout(() => { for (const f of run) f(); }, 0); // after the click the release makes
   };
-  window.addEventListener('pointerdown', (e) => { if (e.isPrimary) pressing = true; }, true);
+  window.addEventListener('pointerdown', (e) => { if (e.isPrimary && e.button === 0) pressing = true; }, true);
   window.addEventListener('pointerup', (e) => { if (e.isPrimary) released(); }, true);
   window.addEventListener('pointercancel', (e) => { if (e.isPrimary) released(); }, true);
   window.addEventListener('pointermove', (e) => { if (pressing && e.isPrimary && e.buttons === 0) released(); }, true);
@@ -89,15 +90,20 @@ export function setupProfileBar(opts: { bar: HTMLElement; sb: SuperbrowserApi })
     pill.querySelector('.n')!.textContent = p.name;
   }
 
-  /** Puts the pill back, showing the latest pushed profile. Nothing is sent. */
-  function endEdit(): void {
+  /**
+   * Puts the pill back, showing the latest pushed profile. Nothing is sent. `keepFocus` (Enter, Escape) moves the
+   * focus from the field to the pill, so a keyboard user keeps their place.
+   */
+  function endEdit(keepFocus = false): void {
     const e = editing;
     if (!e) return;
+    const focused = keepFocus && document.activeElement === e.input;
     editing = null; // first: the field's blur when it leaves the DOM must not count
     const p = latest.get(e.dir);
     if (p) updatePill(e.pill, p);
     e.pill.classList.toggle('on', e.dir === activeProfile);
     e.holder.replaceWith(e.pill);
+    if (focused) e.pill.focus();
   }
 
   /**
@@ -105,18 +111,20 @@ export function setupProfileBar(opts: { bar: HTMLElement; sb: SuperbrowserApi })
    * holder stays until that press ends: swapping the wider holder for the pill now would slide the other pills, and
    * the click would miss the pill it was aimed at.
    */
-  function commitEdit(onBlur = false): void {
+  function commitEdit(onBlur = false, keepFocus = false): void {
     const e = editing;
     if (!e) return;
     if (e.closing) { endEdit(); return; }
     const name = e.input.value.trim();
     if (name !== e.original) sb.send({ type: 'setDisplayName', dir: e.dir, name });
-    if (!onBlur || !pressing) { endEdit(); return; }
+    if (!onBlur || !pressing) { endEdit(keepFocus); return; }
     e.closing = true;
     afterPress.push(() => { if (editing === e) endEdit(); });
   }
 
   function startEdit(dir: string): void {
+    // Main asks for an edit from the pill's menu, after a right-click; whatever press came before is over.
+    pressing = false;
     if (editing?.dir === dir && !editing.closing) { editing.input.focus(); editing.input.select(); return; }
     commitEdit(); // another pill's edit: as if its field lost focus
     const pill = pills.get(dir);
@@ -145,8 +153,9 @@ export function setupProfileBar(opts: { bar: HTMLElement; sb: SuperbrowserApi })
     input.addEventListener('keydown', (e) => {
       e.stopPropagation(); // Esc here cancels the edit and nothing else
       if (e.isComposing) return;
-      if (e.key === 'Enter') { e.preventDefault(); commitEdit(); }
-      else if (e.key === 'Escape') { e.preventDefault(); endEdit(); }
+      // preventDefault: no keypress follows, so the Enter can't reach the pill that takes the focus.
+      if (e.key === 'Enter') { e.preventDefault(); commitEdit(false, true); }
+      else if (e.key === 'Escape') { e.preventDefault(); endEdit(true); }
     });
     // Unlike bookmark rename, blur saves a changed value: setDisplayName names its profile, so it can't land elsewhere.
     input.addEventListener('blur', () => { if (editing?.input === input && !editing.closing) commitEdit(true); });
