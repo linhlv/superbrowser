@@ -131,12 +131,18 @@ export function removeNode(tree: BookmarkTree, id: number): BookmarkTree {
   return { ...tree, nodes: removeFrom(tree.nodes, id) };
 }
 
+/** A folder path as shown in menus and search results; a folder with no title (Chrome allows it) shows "Untitled". */
+function joinPath(prefix: string, title: string): string {
+  const name = title || 'Untitled';
+  return prefix ? `${prefix} / ${name}` : name;
+}
+
 export function folderChoices(tree: BookmarkTree, movingId: number | null): { id: number; path: string }[] {
   const out = [{ id: TOP_LEVEL, path: 'Top Level' }];
   const walk = (list: BookmarkNode[], prefix: string) => {
     for (const n of list) {
       if (n.kind !== 'folder' || n.id === movingId) continue;
-      const path = prefix ? `${prefix} / ${n.title}` : n.title;
+      const path = joinPath(prefix, n.title);
       out.push({ id: n.id, path });
       walk(n.children, path);
     }
@@ -150,7 +156,7 @@ export function flattenBookmarks(nodes: BookmarkNode[]): { id: number; title: st
   const walk = (list: BookmarkNode[], prefix: string) => {
     for (const n of list) {
       if (n.kind === 'url') out.push({ id: n.id, title: n.title, url: n.url, path: prefix });
-      else walk(n.children, prefix ? `${prefix} / ${n.title}` : n.title);
+      else walk(n.children, joinPath(prefix, n.title));
     }
   };
   walk(nodes, '');

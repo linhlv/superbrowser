@@ -1,5 +1,6 @@
 import { Menu, type MenuItemConstructorOptions } from 'electron';
 import type { ImportMode } from '../core/cookies.ts';
+import type { LibraryMenuItem } from '../core/libraryMenus.ts';
 import type { Profile } from '../shared/types.ts';
 
 /**
@@ -25,6 +26,14 @@ export type MenuContext = {
   toggleDevTools(): void;
   back(): void;
   forward(): void;
+  /** Toggles the shown profile's history panel in the main window's sidebar (shown first if hidden), even from a popup. */
+  showHistory(): void;
+  /** Asks, then deletes all of the shown profile's history. */
+  clearHistory(): void;
+  /** Bookmarks the main window's active tab (never a popup's) unless it already is, then shows it in the bookmarks panel. */
+  bookmarkPage(): void;
+  /** Toggles the shown profile's bookmarks panel, like `showHistory`. */
+  showBookmarks(): void;
   showProfile(dir: string): void;
   /** Copy the shown profile's logins from Chrome: 'add' keeps the session's cookies, 'replace' (confirmed) overwrites. */
   importLogins(mode: ImportMode): void;
@@ -115,6 +124,16 @@ export function buildMenu(ctx: MenuContext): Menu {
       submenu: [
         { label: 'Back', accelerator: 'CmdOrCtrl+[', click: () => ctx.back() },
         { label: 'Forward', accelerator: 'CmdOrCtrl+]', click: () => ctx.forward() },
+        sep,
+        { label: 'Show History', accelerator: 'CmdOrCtrl+Y', click: () => ctx.showHistory() },
+        { label: 'Clear History…', click: () => ctx.clearHistory() },
+      ],
+    },
+    {
+      label: 'Bookmarks',
+      submenu: [
+        { label: 'Bookmark This Page', accelerator: 'CmdOrCtrl+D', click: () => ctx.bookmarkPage() },
+        { label: 'Show Bookmarks', accelerator: 'Alt+CmdOrCtrl+B', click: () => ctx.showBookmarks() },
       ],
     },
     {
@@ -176,4 +195,21 @@ export function buildProfileMenu(ctx: ProfileMenuContext): Menu {
     { type: 'separator' },
     { label: 'Open in Chrome', click: () => ctx.openInChrome() },
   ]);
+}
+
+/** What was picked in a bookmark's, folder's or history entry's right-click menu. */
+export type LibraryMenuChoice =
+  | { id: Exclude<LibraryMenuItem['id'], 'separator' | 'moveTo'> }
+  | { id: 'moveTo'; folderId: number };
+
+/** The native menu for a `libraryMenus.ts` spec; "Move to" becomes a submenu of its folder paths. */
+export function buildLibraryMenu(spec: LibraryMenuItem[], choose: (choice: LibraryMenuChoice) => void): Menu {
+  return Menu.buildFromTemplate(spec.map((item): MenuItemConstructorOptions => {
+    if (item.id === 'separator') return { type: 'separator' };
+    if (item.id === 'moveTo') {
+      return { label: item.label, submenu: item.choices.map((c) => ({ label: c.path, click: () => choose({ id: 'moveTo', folderId: c.id }) })) };
+    }
+    const id = item.id;
+    return { label: item.label, click: () => choose({ id }) };
+  }));
 }

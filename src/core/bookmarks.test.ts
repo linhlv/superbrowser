@@ -97,6 +97,17 @@ test('flattenBookmarks gives every bookmark with its folder path', () => {
   assert.equal(flat.find((b) => b.title === 'Figma')!.path, '');
 });
 
+test('a folder with an empty title is "Untitled" in folder paths', () => {
+  const t = decodeTree({ version: 1, nextId: 4, nodes: [
+    { id: 1, kind: 'folder', title: '', added: 1, children: [
+      { id: 2, kind: 'folder', title: 'Inner', added: 1, children: [{ id: 3, kind: 'url', title: 'X', url: 'https://x.test/', added: 1 }] },
+    ] },
+  ] });
+  assert.deepEqual(folderChoices(t, null), [{ id: 0, path: 'Top Level' }, { id: 1, path: 'Untitled' }, { id: 2, path: 'Untitled / Inner' }]);
+  assert.equal(flattenBookmarks(t.nodes)[0]!.path, 'Untitled / Inner');
+  assert.equal(t.nodes[0]!.title, '', 'the stored title is unchanged');
+});
+
 test('decodeTree keeps valid nodes, drops bad ones, repairs ids', () => {
   assert.deepEqual(decodeTree('garbage'), emptyTree());
   const t = decodeTree({ version: 1, nextId: 2, nodes: [

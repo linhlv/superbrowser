@@ -1,19 +1,28 @@
 import path from 'node:path';
-import { app, BrowserWindow, Menu, Notification, type WebContents, type WebContentsView } from 'electron';
-import { toNavigableUrl } from '../core/address.ts';
+import { app, BrowserWindow, clipboard, dialog, Menu, Notification, type WebContents, type WebContentsView } from 'electron';
+import { isWebUrl, toNavigableUrl } from '../core/address.ts';
+import {
+  addBookmark, addFolder, findByUrl, findNode, flattenBookmarks, folderChoices, moveNode, removeNode, renameNode, type BookmarkTree,
+} from '../core/bookmarks.ts';
+import type { HistoryEntry } from '../core/history.ts';
 import { chromeMajor, userAgent } from '../core/identity.ts';
 import { mergeProfiles } from '../core/profiles.ts';
 import { createStore } from '../core/store.ts';
 import { sameSavedTabs } from '../core/tabs.ts';
 import { downloadsOf } from '../core/downloads.ts';
+import { bookmarkMenuSpec, historyMenuSpec } from '../core/libraryMenus.ts';
+import { splitWords } from '../core/searchText.ts';
+import { inlineCompletion, rankSuggestions } from '../core/suggest.ts';
 import { barProfiles, parseUiCommand } from '../core/uiProtocol.ts';
-import { IPC, type DownloadState, type UiCommand, type UiState } from '../shared/types.ts';
+import {
+  IPC, type BookmarkNode, type DownloadState, type LibraryReply, type PanelRequest, type UiCommand, type UiState,
+} from '../shared/types.ts';
 import { createBrowserWindow, createUiView, FindBar, layoutWindow } from './browserWindow.ts';
 import { newProfileInChrome, openProfileInChrome, readChromeProfiles } from './chrome.ts';
 import { ImportFlow } from './importFlow.ts';
 import { HistoryRecorder } from './historyRecorder.ts';
 import { Library } from './library.ts';
-import { buildAddProfileMenu, buildMenu, type MenuContext } from './menu.ts';
+import { buildAddProfileMenu, buildLibraryMenu, buildMenu, type MenuContext } from './menu.ts';
 import { isPopupWindow } from './pages.ts';
 import { ProfileManager } from './profileManager.ts';
 import { configureSessions, revealDownload } from './sessions.ts';
@@ -38,6 +47,9 @@ const STARTUP_STAGGER_MS = 300;
 
 /** Visits older than the retention window are pruned when a profile's history opens, and this often after. */
 const HISTORY_PRUNE_INTERVAL_MS = 24 * 3600e3;
+
+/** History entries matching the typed words that suggestions are ranked from, and rows per history panel page. */
+const SUGGEST_CANDIDATES = 50, HISTORY_PAGE_SIZE = 100;
 
 /** Zoom levels (factor 1.2^level) step by half a level; Chromium allows factors 0.25–5. */
 const ZOOM_STEP = 0.5, MIN_ZOOM = -7.5, MAX_ZOOM = 8.5;
@@ -119,6 +131,12 @@ function start(): void {
       };
       ui.webContents.send(IPC.state, uiState);
     };
+    /** Sends to the UI view unless it is gone (the window is closing). */
+    const toUi = (channel: string, ...args: unknown[]): void => {
+      if (!ui.webContents.isDestroyed()) ui.webContents.send(channel, ...args);
+    };
+    /** The shown profile's bookmarks or history changed: an open panel refetches. */
+    const libraryChanged = (): void => toUi(IPC.libraryChanged);
 
     const tabs: TabManager = new TabManager(window, () => {
       // Merge so tabs of profiles not loaded this run (hidden ones) are kept. Saved only when something saved
@@ -151,9 +169,7 @@ function start(): void {
       visibleProfiles: () => profiles.visible,
       reloadProfile: (dir) => tabs.reloadProfile(dir),
       library,
-      libraryChanged: () => {
-        if (!ui.webContents.isDestroyed()) ui.webContents.send(IPC.libraryChanged);
-      },
+      libraryChanged,
     });
     const relayout = () => layoutWindow(window, ui, findBar, tabs, state.sidebarVisible);
     relayout();
@@ -172,6 +188,147 @@ function start(): void {
       window.focus();
       ui.webContents.focus();
       ui.webContents.send(IPC.focusAddress);
+    };
+
+    // Bookmarks and history: every command and menu item acts on the profile shown when it arrives.
+    const shownDir = (): string | null => tabs.snapshot().dir || null;
+
+    /** `fn()`, or `fallback` if it throws (history that can't open, a failed write): logged, and the caller carries on. */
+    const orElse = <T>(what: string, fallback: T, fn: () => T): T => {
+      try {
+        return fn();
+      } catch (e) {
+        logFailure(what)(e);
+        return fallback;
+      }
+    };
+
+    /** Saves the edited tree (false if that failed) and tells the UI. */
+    const editBookmarks = (dir: string, fn: (t: BookmarkTree) => BookmarkTree): boolean => {
+      const saved = orElse(`saving the bookmarks of ${dir}`, false, () => {
+        library.updateBookmarks(dir, fn);
+        return true;
+      });
+      libraryChanged();
+      return saved;
+    };
+
+    /** A sheet on the main window; true when `button` (not Cancel) was chosen. */
+    const confirm = async (message: string, button: string): Promise<boolean> => {
+      const { response } = await dialog.showMessageBox(window, { type: 'question', message, buttons: [button, 'Cancel'], defaultId: 0, cancelId: 1 });
+      return response === 0;
+    };
+
+    /** In the main window even if a popup has focus; the sidebar is shown first if hidden. */
+    const showPanel = (request: PanelRequest): void => {
+      if (!state.sidebarVisible) setSidebarVisible(true);
+      window.focus();
+      ui.webContents.focus(); // so the panel's search box can take the keyboard
+      toUi(IPC.panel, request);
+    };
+
+    /** The answer to a request from the UI; history that can't be read gives empty results, never no reply. */
+    const libraryReply = (cmd: Extract<UiCommand, { type: 'suggest' | 'historyPage' | 'bookmarks' }>): LibraryReply => {
+      const dir = shownDir();
+      const historyOr = <T>(fallback: T, read: (dir: string) => T): T =>
+        dir ? orElse(`reading the history of ${dir}`, fallback, () => read(dir)) : fallback;
+      switch (cmd.type) {
+        case 'suggest': {
+          const { seq, text } = cmd;
+          const history = historyOr<HistoryEntry[]>([], (d) => library.history(d).candidates(splitWords(text), SUGGEST_CANDIDATES));
+          const bookmarks = dir ? flattenBookmarks(library.bookmarks(dir).nodes).map(({ url, title }) => ({ url, title })) : [];
+          return { kind: 'suggestions', seq, text, completion: inlineCompletion(text, history), items: rankSuggestions({ text, history, bookmarks, now: Date.now() }) };
+        }
+        case 'historyPage': {
+          const { query, before } = cmd;
+          const page = historyOr({ rows: [], more: false }, (d) => library.history(d).page(query, before, HISTORY_PAGE_SIZE, new Date().getTimezoneOffset()));
+          return { kind: 'historyPage', seq: cmd.seq, ...page };
+        }
+        case 'bookmarks': {
+          const nodes = dir ? library.bookmarks(dir).nodes : [];
+          const favicons = historyOr({}, (d) => library.history(d).faviconsFor(flattenBookmarks(nodes).map((b) => b.url)));
+          return { kind: 'bookmarks', seq: cmd.seq, nodes, favicons };
+        }
+      }
+    };
+
+    const showHistoryMenu = (url: string): void => {
+      const dir = shownDir();
+      if (!dir) return;
+      buildLibraryMenu(historyMenuSpec(), (choice) => {
+        switch (choice.id) {
+          case 'openInNewTab': tabs.newTab(url, { dir }); break;
+          case 'copyLink': clipboard.writeText(url); break;
+          case 'deleteFromHistory':
+            orElse(`deleting a page from the history of ${dir}`, undefined, () => library.history(dir).deleteUrl(url));
+            libraryChanged();
+            break;
+        }
+      }).popup({ window });
+    };
+
+    /** Deleting a folder with something in it asks first. */
+    const deleteBookmark = async (dir: string, node: BookmarkNode): Promise<void> => {
+      if (node.kind === 'folder' && node.children.length > 0
+        && !await confirm(`Delete “${node.title || 'Untitled'}” and everything in it?`, 'Delete')) return;
+      editBookmarks(dir, (t) => removeNode(t, node.id));
+    };
+
+    const showBookmarkMenu = (id: number): void => {
+      const dir = shownDir();
+      const tree = dir ? library.bookmarks(dir) : null;
+      const node = tree ? findNode(tree, id)?.node : undefined;
+      if (!dir || !tree || !node) {
+        log(`ignored a menu for bookmark ${id}: not in the shown profile`);
+        return;
+      }
+      buildLibraryMenu(bookmarkMenuSpec(node, folderChoices(tree, id)), (choice) => {
+        switch (choice.id) {
+          case 'openInNewTab': if (node.kind === 'url') tabs.newTab(node.url, { dir }); break;
+          case 'copyLink': if (node.kind === 'url') clipboard.writeText(node.url); break;
+          case 'rename': toUi(IPC.startRename, id); break;
+          case 'moveTo': editBookmarks(dir, (t) => moveNode(t, id, choice.folderId)); break;
+          case 'newFolder': {
+            const added = addFolder(library.bookmarks(dir), id, 'New Folder', Date.now());
+            if (added.id !== null && editBookmarks(dir, () => added.tree)) toUi(IPC.startRename, added.id);
+            break;
+          }
+          case 'delete': void deleteBookmark(dir, node).catch(logFailure('deleting a bookmark')); break;
+        }
+      }).popup({ window });
+    };
+
+    const renameBookmark = (id: number, title: string): void => {
+      const dir = shownDir();
+      if (dir && findNode(library.bookmarks(dir), id)) editBookmarks(dir, (t) => renameNode(t, id, title));
+      else log(`ignored renaming bookmark ${id}: not in the shown profile`);
+    };
+
+    /** The main window's active tab (never a popup's): bookmarked unless it already is, then shown in the panel. */
+    const bookmarkPage = (): void => {
+      const snap = tabs.snapshot();
+      const dir = snap.dir;
+      if (!dir) return;
+      let highlight: number | null = null;
+      if (isWebUrl(snap.url)) {
+        const tree = library.bookmarks(dir);
+        const existing = findByUrl(tree, snap.url);
+        if (existing) {
+          highlight = existing.id;
+        } else {
+          const title = snap.tabs.find((t) => t.id === snap.activeTabId)?.title || snap.url;
+          const added = addBookmark(tree, { title, url: snap.url }, Date.now());
+          if (added.id !== null && editBookmarks(dir, () => added.tree)) highlight = added.id;
+        }
+      }
+      showPanel({ panel: 'bookmarks', mode: 'show', highlight });
+    };
+
+    const clearHistory = async (): Promise<void> => {
+      const dir = shownDir();
+      if (!dir || !await confirm(`Clear all history for ${profileName(dir)}?`, 'Clear History')) return;
+      orElse(`clearing the history of ${dir}`, undefined, () => library.history(dir).clear());
+      libraryChanged();
     };
 
     const setShowNames = (on: boolean): void => {
@@ -254,6 +411,10 @@ function start(): void {
         if (!history) tabs.forward();
         else if (history.canGoForward()) history.goForward();
       },
+      showHistory: () => showPanel({ panel: 'history', mode: 'toggle', highlight: null }),
+      clearHistory: () => void clearHistory().catch(logFailure('clearing history')),
+      bookmarkPage,
+      showBookmarks: () => showPanel({ panel: 'bookmarks', mode: 'toggle', highlight: null }),
       showProfile: (dir) => tabs.showProfile(dir),
       importLogins: (mode) => void imports.importCurrent(mode).catch(logFailure('importing logins')),
       importLoginsForAllProfiles: () => void imports.importAll().catch(logFailure('importing logins')),
@@ -304,6 +465,18 @@ function start(): void {
         case 'revealDownload': revealDownload(cmd.id); break;
         case 'find': findBar.find(cmd.text, cmd.forward); break;
         case 'findClose': findBar.close(true); break;
+        case 'suggest':
+        case 'historyPage':
+        case 'bookmarks':
+          toUi(IPC.library, libraryReply(cmd));
+          break;
+        case 'openUrl':
+          if (cmd.newTab) tabs.newTab(cmd.url);
+          else tabs.navigate(cmd.url);
+          break;
+        case 'historyMenu': showHistoryMenu(cmd.url); break;
+        case 'bookmarkMenu': showBookmarkMenu(cmd.id); break;
+        case 'renameBookmark': renameBookmark(cmd.id, cmd.title); break;
       }
     };
     // Validated against the profiles visible right now (profiles.dirs is replaced on every change).
