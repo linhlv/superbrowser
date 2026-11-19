@@ -17,9 +17,10 @@ button { font: inherit; color: inherit; cursor: default; }
 /* Icons (parts/icons.ts) are inline SVG drawn in the current text colour. */
 .ic { display: block; width: 16px; height: 16px; flex: none; }
 
-/* Keyboard focus is always visible (mouse clicks don't show it). Blue reads on the dark tint and on white rows alike;
-   drawn inside the element so scrolling lists don't clip it. */
+/* Keyboard focus is always visible (mouse clicks don't show it), drawn inside the element so scrolling lists don't clip
+   it: light blue on the dark tint, a darker blue on the white active tab and highlighted bookmark (both ≥ 3:1). */
 :focus-visible { outline: 2px solid #4da3ff; outline-offset: -2px; }
+.tab.on:focus-visible, .pr.hl:focus-visible { outline-color: #0a64d6; }
 
 /* "Reduce motion" in macOS turns off every transition and animation in our pages. */
 @media (prefers-reduced-motion: reduce) {
@@ -71,7 +72,8 @@ body.collapsed #side { display: none; }
 }
 .sec-h:hover { background: rgba(255,255,255,.1); opacity: 1; }
 .sec-a { width: 12px; flex: none; display: grid; place-items: center; }
-.sec-a .ic { width: 12px; height: 12px; transition: transform .15s; }
+.sec-a .ic { width: 12px; height: 12px; }
+body.ready .sec-a .ic { transition: transform .15s; } /* not on launch, when a restored section opens */
 .sec.open .sec-a .ic { transform: rotate(90deg); }
 .sec-b { display: none; }
 .sec.open .sec-b { flex: 1; min-height: 0; display: flex; flex-direction: column; margin-top: 4px; }

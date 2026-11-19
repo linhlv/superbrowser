@@ -16,13 +16,14 @@ test('luminance and contrast follow WCAG', () => {
   assert.equal(Math.round(contrast('#767676', '#ffffff') * 10) / 10, 4.5);
 });
 
-test('readableTint: dark enough colours are kept as they are', () => {
-  assert.equal(readableTint('#3366cc'), '#3366cc');
-  assert.equal(readableTint('#000000'), '#000000');
+test('readableTint: dark enough colours are kept as they are, including Chrome\'s usual profile colours', () => {
+  for (const hex of ['#3366cc', '#000000', '#4285f4', '#1a73e8', '#1e8e3e', '#e52592', '#808080']) {
+    assert.equal(readableTint(hex), hex, hex);
+  }
 });
 
 test('readableTint: light colours are darkened until white text reads on the gradient, keeping the hue', () => {
-  for (const hex of ['#ffeb3b', '#ffffff', '#a5d6a7', '#2e9e5b', '#f8bbd0']) {
+  for (const hex of ['#ffeb3b', '#ffffff', '#a5d6a7', '#f8bbd0', '#81d4fa']) {
     const out = readableTint(hex);
     assert.ok(topOf(out) <= MAX_TOP_LUMINANCE, `${hex} → ${out}`);
     assert.ok(contrast('#ffffff', out) > contrast('#ffffff', hex), `${hex} got darker`);
@@ -36,10 +37,10 @@ test('readableTint: anything that is not #rrggbb passes through', () => {
   assert.equal(readableTint(''), '');
 });
 
-test('textOn: dark text on light fills, white on dark ones', () => {
-  assert.equal(textOn('#ffeb3b'), '#111111');
-  assert.equal(textOn('#ffffff'), '#111111');
-  assert.equal(textOn('#3366cc'), '#ffffff');
-  assert.equal(textOn('#000000'), '#ffffff');
+test('textOn: dark text only where white would be hard to read (light fills), white like Chrome elsewhere', () => {
+  for (const hex of ['#ffeb3b', '#ffffff', '#a5d6a7', '#f8bbd0']) assert.equal(textOn(hex), '#111111', hex);
+  for (const hex of ['#3366cc', '#000000', '#4285f4', '#34a853', '#1e8e3e', '#e52592', '#e8710a', '#ff5722']) {
+    assert.equal(textOn(hex), '#ffffff', hex);
+  }
   assert.equal(textOn('nonsense'), '#ffffff');
 });

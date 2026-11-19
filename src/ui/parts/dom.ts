@@ -27,8 +27,10 @@ export function faviconIcon(favicon: string | null | undefined): HTMLElement {
  */
 export function activatable(node: HTMLElement): void {
   node.tabIndex = 0;
+  if (!node.hasAttribute('role')) node.setAttribute('role', 'button');
   node.addEventListener('keydown', (e) => {
     if (e.target !== node || e.isComposing || (e.key !== 'Enter' && e.key !== ' ')) return;
+    if (e.repeat) { e.preventDefault(); return; } // holding Enter must not open a page again and again
     e.preventDefault();
     node.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, metaKey: e.metaKey }));
   });

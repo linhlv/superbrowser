@@ -25,10 +25,10 @@ export function contrast(a: string, b: string): number {
 }
 
 /**
- * The lightest the window gradient's top (70 % tint over black, ui.css) may be. At this luminance white text has about
- * 8:1 contrast, so the sidebar's secondary text (white at ≥ 80 % opacity) still clears 4.5:1.
+ * The lightest the window gradient's top (70 % tint over black, ui.css) may be: up to here the sidebar's secondary text
+ * (white at ≥ 80 % opacity, blended over the tint) still clears 4.5:1, and Chrome's usual profile colours stay as they are.
  */
-export const MAX_TOP_LUMINANCE = 0.08;
+export const MAX_TOP_LUMINANCE = 0.12;
 
 /**
  * The profile colour to tint the window with: the colour itself when white text reads on the gradient made from it,
@@ -44,8 +44,11 @@ export function readableTint(hex: string): string {
   return '#000000';
 }
 
-/** Text colour for a label drawn on `hex` (a profile avatar): near-black on light fills, white otherwise. */
+/**
+ * Text colour for the initials on a profile avatar: white, as Chrome draws them, unless white falls below 3:1 on `hex`
+ * (large bold text's minimum, i.e. a light fill such as yellow, mint or pink); then near-black.
+ */
 export function textOn(hex: string): '#111111' | '#ffffff' {
   if (!HEX.test(hex)) return '#ffffff';
-  return contrast('#111111', hex) > contrast('#ffffff', hex) ? '#111111' : '#ffffff';
+  return contrast('#ffffff', hex) < 3 ? '#111111' : '#ffffff';
 }

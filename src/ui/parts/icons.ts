@@ -44,6 +44,7 @@ export function icon(name: IconName, filled = false): SVGSVGElement {
 /** Puts `name`'s icon in each element marked `data-icon="<name>"` under `root` (static buttons in our HTML pages). */
 export function fillIcons(root: ParentNode): void {
   for (const node of Array.from(root.querySelectorAll<HTMLElement>('[data-icon]'))) {
-    node.replaceChildren(icon(node.dataset['icon'] as IconName));
+    const name = node.dataset['icon'] ?? '';
+    if (Object.hasOwn(ICONS, name)) node.replaceChildren(icon(name as IconName)); // an unknown name leaves the node as is
   }
 }

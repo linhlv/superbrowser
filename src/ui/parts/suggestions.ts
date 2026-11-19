@@ -66,7 +66,7 @@ export function setupSuggestions(opts: {
     if (item) {
       text.append(span('sg-title', item.title || item.url), span('sg-url', item.url));
       el.append(span('icon ph', ''), text);
-      if (item.bookmarked) { const star = span('sg-star', ''); star.append(icon('star', true)); star.title = 'Bookmarked'; el.append(star); }
+      if (item.bookmarked) { const star = span('sg-star', ''); star.append(icon('star', true)); star.title = 'Bookmarked'; star.setAttribute('role', 'img'); star.setAttribute('aria-label', 'Bookmarked'); el.append(star); }
     } else {
       text.append(span('sg-title', `Search Google for “${typed}”`));
       el.append(span('icon ph', ''), text);
