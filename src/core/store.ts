@@ -2,6 +2,20 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { decodeState, defaultState, type AppState } from './appState.ts';
 
+/** Writes `text` to `file` atomically: creates the parent dir, writes and fsyncs a temp file, then renames it over `file`. */
+export function writeFileAtomic(file: string, text: string): void {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const tmp = file + '.tmp';
+  const fd = fs.openSync(tmp, 'w');
+  try {
+    fs.writeSync(fd, text);
+    fs.fsyncSync(fd);
+  } finally {
+    fs.closeSync(fd);
+  }
+  fs.renameSync(tmp, file);
+}
+
 export type Store = { load(): AppState; save(state: AppState): void; flush(): void };
 
 /**
@@ -16,19 +30,6 @@ export function createStore(file: string, opts: { debounceMs?: number; maxWaitMs
   let timer: NodeJS.Timeout | null = null;
   let maxTimer: NodeJS.Timeout | null = null;
 
-  function write(state: AppState): void {
-    fs.mkdirSync(path.dirname(file), { recursive: true });
-    const tmp = file + '.tmp';
-    const fd = fs.openSync(tmp, 'w');
-    try {
-      fs.writeSync(fd, JSON.stringify(state, null, 2));
-      fs.fsyncSync(fd);
-    } finally {
-      fs.closeSync(fd);
-    }
-    fs.renameSync(tmp, file);
-  }
-
   function flush(): void {
     if (timer) clearTimeout(timer);
     if (maxTimer) clearTimeout(maxTimer);
@@ -36,7 +37,7 @@ export function createStore(file: string, opts: { debounceMs?: number; maxWaitMs
     if (pending) {
       const state = pending;
       pending = null;
-      write(state);
+      writeFileAtomic(file, JSON.stringify(state, null, 2));
     }
   }
 
