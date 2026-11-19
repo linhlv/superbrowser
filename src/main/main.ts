@@ -440,6 +440,7 @@ function start(): void {
       switch (cmd.type) {
         case 'selectProfile': tabs.showProfile(cmd.dir); break;
         case 'profileMenu': profiles.showMenu(cmd.dir); break;
+        case 'reorderProfile': profiles.place(cmd.dir, cmd.before); break;
         case 'addProfileMenu':
           buildAddProfileMenu({
             importLogins: () => menuActions.importLogins('add'),

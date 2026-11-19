@@ -21,6 +21,8 @@ test('parseUiCommand: accepts every well-formed command and keeps only its field
     { type: 'selectProfile', dir: 'Default' },
     { type: 'profileMenu', dir: 'Profile 3' },
     { type: 'addProfileMenu' },
+    { type: 'reorderProfile', dir: 'Default', before: 'Profile 3' },
+    { type: 'reorderProfile', dir: 'Profile 3', before: null },
     { type: 'selectTab', id: 4 },
     { type: 'closeTab', id: 1 },
     { type: 'newTab' },
@@ -96,4 +98,13 @@ test('parseUiCommand: rejects bad library commands', () => {
     { type: 'renameBookmark', id: 5, title: 'x'.repeat(1025) }, { type: 'renameBookmark', id: 5 },
   ];
   for (const c of bad) assert.equal(parseUiCommand(c, known), null, JSON.stringify(c).slice(0, 80));
+});
+
+test('parseUiCommand: rejects bad reorderProfile', () => {
+  for (const c of [
+    { type: 'reorderProfile', dir: 'Default' },                       // before missing
+    { type: 'reorderProfile', dir: 'Default', before: 'Profile 9' },  // unknown before
+    { type: 'reorderProfile', dir: 'Profile 9', before: null },       // unknown dir
+    { type: 'reorderProfile', dir: 'Default', before: 3 },
+  ]) assert.equal(parseUiCommand(c, known), null, JSON.stringify(c));
 });

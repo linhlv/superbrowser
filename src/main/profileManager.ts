@@ -1,6 +1,6 @@
 import type { BrowserWindow } from 'electron';
 import type { AppState } from '../core/appState.ts';
-import { arrangeProfiles, hideProfile, hidesEveryProfile, mergeProfiles, moveProfile } from '../core/profiles.ts';
+import { arrangeProfiles, hideProfile, hidesEveryProfile, mergeProfiles, moveProfile, placeProfile } from '../core/profiles.ts';
 import type { Profile } from '../shared/types.ts';
 import { openProfileInChrome } from './chrome.ts';
 import { buildProfileMenu } from './menu.ts';
@@ -43,6 +43,13 @@ export class ProfileManager {
     const { state } = this.deps;
     state.hiddenProfiles = state.hiddenProfiles.filter((d) => d !== dir);
     this.changed();
+  }
+
+  /** Drag-to-reorder: put `dir` just before `before` (null: last) among the visible profiles. */
+  place(dir: string, before: string | null): void {
+    const { state } = this.deps;
+    const next = placeProfile(state.knownProfiles, state.profileOrder, state.hiddenProfiles, dir, before);
+    if (next) { state.profileOrder = next; this.changed(); }
   }
 
   /** The profile dot's right-click menu: move, hide, open in Chrome. */

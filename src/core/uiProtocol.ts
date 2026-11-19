@@ -27,6 +27,10 @@ export function parseUiCommand(raw: unknown, knownDirs: ReadonlySet<string>): Ui
     case 'selectProfile':
     case 'profileMenu':
       return dir === null ? null : { type, dir };
+    case 'reorderProfile': {
+      const before = raw['before'];
+      return dir !== null && (before === null || (typeof before === 'string' && knownDirs.has(before))) ? { type, dir, before } : null;
+    }
     case 'selectTab':
     case 'closeTab':
       return Number.isInteger(id) ? { type, id: id as number } : null;

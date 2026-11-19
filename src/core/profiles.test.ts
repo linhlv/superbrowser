@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { argbToHex, parseLocalState, mergeProfiles, arrangeProfiles, moveProfile, hideProfile, hidesEveryProfile } from './profiles.ts';
+import { argbToHex, parseLocalState, mergeProfiles, arrangeProfiles, moveProfile, placeProfile, hideProfile, hidesEveryProfile } from './profiles.ts';
 import type { Profile } from '../shared/types.ts';
 
 const p = (dir: string, name = dir, color = '#808080'): Profile => ({ dir, name, color });
@@ -118,4 +118,33 @@ test('hidesEveryProfile is true only when every known profile is hidden', () => 
   assert.equal(hidesEveryProfile(all, ['Z']), false);
   assert.equal(hidesEveryProfile(all, []), false);
   assert.equal(hidesEveryProfile([], ['A']), false); // nothing known: nothing to show either way
+});
+
+test('placeProfile moves a visible profile before another', () => {
+  const all = [p('A'), p('B'), p('C'), p('D')];
+  assert.deepEqual(placeProfile(all, [], [], 'D', 'A'), ['D', 'A', 'B', 'C']);
+  assert.deepEqual(placeProfile(all, [], [], 'A', 'D'), ['B', 'C', 'A', 'D']);
+});
+
+test('placeProfile with before null puts it after the last visible profile', () => {
+  const all = [p('A'), p('B'), p('C'), p('D')];
+  assert.deepEqual(placeProfile(all, [], [], 'A', null), ['B', 'C', 'D', 'A']);
+});
+
+test('placeProfile keeps hidden profiles in their slots', () => {
+  const all = [p('A'), p('B'), p('C'), p('D')];
+  // C hidden at index 2; visible order A,B,D → move D before A → visible D,A,B refilled into slots 0,1,3
+  assert.deepEqual(placeProfile(all, [], ['C'], 'D', 'A'), ['D', 'A', 'C', 'B']);
+  // before null with the last slot hidden: A moves after D (last visible), C stays at index 3
+  assert.deepEqual(placeProfile(all, ['A', 'B', 'D', 'C'], ['C'], 'A', null), ['B', 'D', 'A', 'C']);
+});
+
+test('placeProfile returns null when nothing changes or the move is invalid', () => {
+  const all = [p('A'), p('B'), p('C'), p('D')];
+  assert.equal(placeProfile(all, [], [], 'B', 'C'), null);      // already right before C
+  assert.equal(placeProfile(all, [], [], 'D', null), null);     // already last
+  assert.equal(placeProfile(all, [], [], 'B', 'B'), null);      // before itself
+  assert.equal(placeProfile(all, [], ['C'], 'C', 'A'), null);   // hidden dir
+  assert.equal(placeProfile(all, [], ['C'], 'A', 'C'), null);   // hidden before
+  assert.equal(placeProfile(all, [], [], 'Z', 'A'), null);      // unknown
 });

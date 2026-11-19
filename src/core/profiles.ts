@@ -79,6 +79,22 @@ export function moveProfile(all: Profile[], order: string[], hidden: string[], d
   return dirs;
 }
 
+/**
+ * The new `profileOrder` (every known profile) after dropping the visible `dir` just before the visible `beforeDir`
+ * (null: after the last visible one); hidden profiles keep their slots. Null when nothing would change or the move is invalid.
+ */
+export function placeProfile(all: Profile[], order: string[], hidden: string[], dir: string, beforeDir: string | null): string[] | null {
+  const dirs = arrange(all, order).map((x) => x.dir);
+  const hiddenSet = new Set(hidden);
+  const visible = dirs.filter((d) => !hiddenSet.has(d));
+  if (!visible.includes(dir) || beforeDir === dir || (beforeDir !== null && !visible.includes(beforeDir))) return null;
+  const moved = visible.filter((d) => d !== dir);
+  moved.splice(beforeDir === null ? moved.length : moved.indexOf(beforeDir), 0, dir);
+  if (moved.every((d, i) => d === visible[i])) return null;
+  let next = 0;
+  return dirs.map((d) => (hiddenSet.has(d) ? d : moved[next++]!));
+}
+
 /** The new `hiddenProfiles` with `dir` added. Null when `dir` isn't a visible profile or is the last visible one. */
 export function hideProfile(all: Profile[], hidden: string[], dir: string): string[] | null {
   const visible = arrangeProfiles(all, [], hidden).visible;
