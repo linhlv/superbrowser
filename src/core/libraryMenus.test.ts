@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { bookmarkMenuSpec, historyMenuSpec, type LibraryMenuItem } from './libraryMenus.ts';
+import { bookmarkMenuSpec, historyMenuSpec, panelRequestFor, type LibraryMenuItem } from './libraryMenus.ts';
 import type { BookmarkNode } from '../shared/types.ts';
 
 const labels = (spec: LibraryMenuItem[]) => spec.map((i) => ('label' in i ? i.label : '—'));
@@ -27,4 +27,12 @@ test('history menu: Open in New Tab, Copy Link, Delete from History', () => {
   const spec = historyMenuSpec();
   assert.deepEqual(labels(spec), ['Open in New Tab', 'Copy Link', '—', 'Delete from History']);
   assert.deepEqual(spec.map((i) => i.id), ['openInNewTab', 'copyLink', 'separator', 'deleteFromHistory']);
+});
+
+test('a panel request that had to reveal the sidebar always shows the panel', () => {
+  const toggle = { panel: 'history', mode: 'toggle', highlight: null } as const;
+  assert.deepEqual(panelRequestFor(toggle, true), { panel: 'history', mode: 'show', highlight: null });
+  assert.deepEqual(panelRequestFor(toggle, false), toggle);
+  const show = { panel: 'bookmarks', mode: 'show', highlight: 3 } as const;
+  assert.deepEqual(panelRequestFor(show, true), show);
 });

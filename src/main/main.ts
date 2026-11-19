@@ -10,7 +10,7 @@ import { mergeProfiles } from '../core/profiles.ts';
 import { createStore } from '../core/store.ts';
 import { sameSavedTabs } from '../core/tabs.ts';
 import { downloadsOf } from '../core/downloads.ts';
-import { bookmarkMenuSpec, historyMenuSpec } from '../core/libraryMenus.ts';
+import { bookmarkMenuSpec, historyMenuSpec, panelRequestFor } from '../core/libraryMenus.ts';
 import { splitWords } from '../core/searchText.ts';
 import { inlineCompletion, rankSuggestions } from '../core/suggest.ts';
 import { barProfiles, parseUiCommand } from '../core/uiProtocol.ts';
@@ -219,12 +219,13 @@ function start(): void {
       return response === 0;
     };
 
-    /** In the main window even if a popup has focus; the sidebar is shown first if hidden. */
+    /** In the main window even if a popup has focus; the sidebar is shown first if hidden (and the panel then shown, never toggled closed). */
     const showPanel = (request: PanelRequest): void => {
-      if (!state.sidebarVisible) setSidebarVisible(true);
+      const reveal = !state.sidebarVisible;
+      if (reveal) setSidebarVisible(true);
       window.focus();
       ui.webContents.focus(); // so the panel's search box can take the keyboard
-      toUi(IPC.panel, request);
+      toUi(IPC.panel, panelRequestFor(request, reveal));
     };
 
     /** The answer to a request from the UI; history that can't be read gives empty results, never no reply. */
