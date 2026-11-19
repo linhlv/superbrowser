@@ -63,7 +63,8 @@ export function rankSuggestions(input: {
   return scored.slice(0, input.limit ?? SUGGESTION_LIMIT).map(({ row }) => ({ url: row.url, title: row.title, bookmarked: row.bookmarked }));
 }
 
-type Stripped = { entry: HistoryEntry; stripped: string; host: string };
+/** `text`: the URL without scheme or trailing '/', host lowercased, path and query as stored; `key`: `text` lowercased. */
+type Stripped = { entry: HistoryEntry; text: string; key: string; host: string };
 
 function better(a: Stripped, b: Stripped): boolean {
   return (
@@ -79,7 +80,10 @@ function best(list: Stripped[]): Stripped | undefined {
   return top;
 }
 
-/** The full text the address field should show for `text`, or null. Lowercase, no scheme, no trailing '/'. */
+/**
+ * The full text the address field should show for `text`, or null: no scheme, no trailing '/'. Matching
+ * ignores case; the host comes back lowercase and the path and query as stored (they can be case-sensitive).
+ */
 export function inlineCompletion(text: string, history: HistoryEntry[]): string | null {
   if (text === '' || /\s/.test(text) || text.includes('://')) return null;
   const typed = text.toLowerCase();
@@ -88,20 +92,23 @@ export function inlineCompletion(text: string, history: HistoryEntry[]): string 
   const all: Stripped[] = [];
   for (const entry of history) {
     if (!/^https?:\/\//i.test(entry.url)) continue;
-    let stripped = entry.url.replace(/^https?:\/\//i, '').replace(/\/$/, '').toLowerCase();
-    if (!keepWww) stripped = stripped.replace(/^www\./, '');
-    all.push({ entry, stripped, host: stripped.split(/[/?#]/)[0]! });
+    const rest = entry.url.replace(/^https?:\/\//i, '').replace(/\/$/, '');
+    const hostEnd = rest.search(/[/?#]/);
+    let host = (hostEnd < 0 ? rest : rest.slice(0, hostEnd)).toLowerCase();
+    if (!keepWww) host = host.replace(/^www\./, '');
+    const text = host + (hostEnd < 0 ? '' : rest.slice(hostEnd));
+    all.push({ entry, text, key: text.toLowerCase(), host });
   }
 
   let completion: string | undefined;
   if (typed.includes('/')) {
-    completion = best(all.filter((x) => x.stripped.startsWith(typed)))?.stripped;
+    completion = best(all.filter((x) => x.key.startsWith(typed)))?.text;
   } else {
     const top = best(all.filter((x) => x.host.startsWith(typed)));
     if (top) {
       const sameHost = all.filter((x) => x.host === top.host);
-      completion = sameHost.some((x) => x.stripped === top.host) ? top.host : best(sameHost)!.stripped;
+      completion = sameHost.some((x) => x.text === top.host) ? top.host : best(sameHost)!.text;
     }
   }
-  return completion === undefined || completion === typed ? null : completion;
+  return completion === undefined || completion.toLowerCase() === typed ? null : completion;
 }

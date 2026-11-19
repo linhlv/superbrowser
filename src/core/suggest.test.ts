@@ -81,3 +81,10 @@ test('inlineCompletion ignores case and non-http entries', () => {
   assert.equal(inlineCompletion('GIT', [e('https://GitHub.com/', 1, 0, 1)]), 'github.com');
   assert.equal(inlineCompletion('fi', [e('file:///etc/hosts', 5, 0, 1), e('ftp://files.example/', 5, 0, 1)]), null);
 });
+
+test('inlineCompletion keeps the stored case of the path and query', () => {
+  assert.equal(inlineCompletion('docs.g', [e('https://docs.google.com/d/AbC/edit', 1, 0, 1)]), 'docs.google.com/d/AbC/edit');
+  assert.equal(inlineCompletion('docs.google.com/d/a', [e('https://docs.google.com/d/AbC/edit', 1, 0, 1)]), 'docs.google.com/d/AbC/edit');
+  assert.equal(inlineCompletion('site12.ex', [e('https://WWW.Site12.Example5.com/path/12/?id=AbC12', 1, 0, 1)]), 'site12.example5.com/path/12/?id=AbC12');
+  assert.equal(inlineCompletion('docs.google.com/d/abc/edit', [e('https://docs.google.com/d/AbC/edit', 1, 0, 1)]), null);
+});
