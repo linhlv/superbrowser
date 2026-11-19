@@ -8,9 +8,9 @@ import { downloadsOf } from '../core/downloads.ts';
 import { barProfiles, parseUiCommand } from '../core/uiProtocol.ts';
 import { IPC, type DownloadState, type UiCommand, type UiState } from '../shared/types.ts';
 import { createBrowserWindow, createUiView, FindBar, layoutWindow } from './browserWindow.ts';
-import { openProfileInChrome, readChromeProfiles } from './chrome.ts';
+import { newProfileInChrome, openProfileInChrome, readChromeProfiles } from './chrome.ts';
 import { ImportFlow } from './importFlow.ts';
-import { buildMenu, type MenuContext } from './menu.ts';
+import { buildAddProfileMenu, buildMenu, type MenuContext } from './menu.ts';
 import { isPopupWindow } from './pages.ts';
 import { ProfileManager } from './profileManager.ts';
 import { configureSessions, revealDownload } from './sessions.ts';
@@ -262,6 +262,13 @@ function start(): void {
       switch (cmd.type) {
         case 'selectProfile': tabs.showProfile(cmd.dir); break;
         case 'profileMenu': profiles.showMenu(cmd.dir); break;
+        case 'addProfileMenu':
+          buildAddProfileMenu({
+            importLogins: () => menuActions.importLogins('add'),
+            importLoginsForAllProfiles: () => menuActions.importLoginsForAllProfiles(),
+            newProfileInChrome: () => newProfileInChrome(log),
+          }).popup({ window });
+          break;
         case 'selectTab': tabs.selectTab(cmd.id); break;
         case 'closeTab': tabs.closeTab(cmd.id); break;
         case 'newTab': tabs.newTab(); break;
@@ -290,6 +297,8 @@ function start(): void {
     listen(ui, (cmd) => !isFind(cmd));
     listen(findBar.view, isFind);
     ui.webContents.on('did-finish-load', pushState);
+    // Back from Chrome (e.g. after creating a profile there): pick up the new profile.
+    window.on('focus', () => profiles.refresh(readChromeProfiles()));
 
     const saveBounds = () => {
       if (window.isFullScreen()) return;

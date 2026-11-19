@@ -20,6 +20,7 @@ test('parseUiCommand: accepts every well-formed command and keeps only its field
   const cases: unknown[] = [
     { type: 'selectProfile', dir: 'Default' },
     { type: 'profileMenu', dir: 'Profile 3' },
+    { type: 'addProfileMenu' },
     { type: 'selectTab', id: 4 },
     { type: 'closeTab', id: 1 },
     { type: 'newTab' },

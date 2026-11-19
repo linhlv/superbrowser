@@ -11,7 +11,7 @@ export type UiState = {
   downloads: DownloadState[];   // the shown profile's only
 };
 export type UiCommand =
-  | { type: 'selectProfile'; dir: string } | { type: 'profileMenu'; dir: string }
+  | { type: 'selectProfile'; dir: string } | { type: 'profileMenu'; dir: string } | { type: 'addProfileMenu' }
   | { type: 'selectTab'; id: number } | { type: 'closeTab'; id: number } | { type: 'newTab' }
   | { type: 'navigate'; input: string } | { type: 'back' } | { type: 'forward' } | { type: 'reload' }
   | { type: 'toggleSidebar' } | { type: 'revealDownload'; id: string }

@@ -17,6 +17,13 @@ export function readChromeProfiles(): Profile[] | null {
   }
 }
 
+/** Opens Chrome's "new profile" page. Chrome creates the profile itself (we never write Chrome's data). */
+export function newProfileInChrome(log: (msg: string) => void): void {
+  execFile('open', ['-na', 'Google Chrome', '--args', 'chrome://profile-picker/new-profile'], (err) => {
+    if (err) log(`could not open Chrome's new profile page: ${err.message}`);
+  });
+}
+
 export function openProfileInChrome(dir: string, log: (msg: string) => void): void {
   execFile('open', ['-na', 'Google Chrome', '--args', `--profile-directory=${dir}`], (err) => {
     if (err) log(`could not open profile ${dir} in Chrome: ${err.message}`);

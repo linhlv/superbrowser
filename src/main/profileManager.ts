@@ -1,6 +1,6 @@
 import type { BrowserWindow } from 'electron';
 import type { AppState } from '../core/appState.ts';
-import { arrangeProfiles, hideProfile, hidesEveryProfile, moveProfile } from '../core/profiles.ts';
+import { arrangeProfiles, hideProfile, hidesEveryProfile, mergeProfiles, moveProfile } from '../core/profiles.ts';
 import type { Profile } from '../shared/types.ts';
 import { openProfileInChrome } from './chrome.ts';
 import { buildProfileMenu } from './menu.ts';
@@ -64,6 +64,15 @@ export class ProfileManager {
       },
       openInChrome: () => openProfileInChrome(dir, log),
     }).popup({ window });
+  }
+
+  /** Re-reads Chrome's profile list (a profile may have been created there); updates the bar only if it changed. */
+  refresh(fromChrome: Profile[] | null): void {
+    const { state } = this.deps;
+    const merged = mergeProfiles(fromChrome, state.knownProfiles);
+    if (JSON.stringify(merged) === JSON.stringify(state.knownProfiles)) return;
+    state.knownProfiles = merged;
+    this.changed();
   }
 
   /** Recomputes the lists from state and hands them to TabManager (which profiles it shows, which are muted). */

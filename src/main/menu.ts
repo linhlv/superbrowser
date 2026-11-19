@@ -136,6 +136,22 @@ export function buildMenu(ctx: MenuContext): Menu {
   ]);
 }
 
+/** The "+" button's menu: bring logins in, or create a profile. */
+export type AddProfileMenuContext = {
+  importLogins(): void;
+  importLoginsForAllProfiles(): void;
+  newProfileInChrome(): void;
+};
+
+export function buildAddProfileMenu(ctx: AddProfileMenuContext): Menu {
+  return Menu.buildFromTemplate([
+    { label: 'Import Logins from Chrome', click: () => ctx.importLogins() },
+    { label: 'Import Logins for All Profiles', click: () => ctx.importLoginsForAllProfiles() },
+    { type: 'separator' },
+    { label: 'New Profile in Chrome…', click: () => ctx.newProfileInChrome() },
+  ]);
+}
+
 /** The right-click menu of a profile dot in the bottom bar. */
 export type ProfileMenuContext = {
   canMoveLeft: boolean;

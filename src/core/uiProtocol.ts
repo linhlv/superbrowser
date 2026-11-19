@@ -31,6 +31,7 @@ export function parseUiCommand(raw: unknown, knownDirs: ReadonlySet<string>): Ui
     case 'find':
       return typeof raw['text'] === 'string' && typeof raw['forward'] === 'boolean'
         ? { type, text: raw['text'], forward: raw['forward'] } : null;
+    case 'addProfileMenu':
     case 'newTab':
     case 'back':
     case 'forward':

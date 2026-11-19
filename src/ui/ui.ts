@@ -45,6 +45,7 @@ backBtn.addEventListener('click', () => sb.send({ type: 'back' }));
 forwardBtn.addEventListener('click', () => sb.send({ type: 'forward' }));
 reloadBtn.addEventListener('click', () => sb.send({ type: 'reload' }));
 byId('newtab').addEventListener('click', () => sb.send({ type: 'newTab' }));
+byId('addprofile').addEventListener('click', () => sb.send({ type: 'addProfileMenu' }));
 byId('toggle').addEventListener('click', () => sb.send({ type: 'toggleSidebar' }));
 
 // Tab rows are kept by id and updated in place, so hover (and the × under the mouse) survives state pushes.
