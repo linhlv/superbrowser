@@ -132,6 +132,15 @@ export function removeNode(tree: BookmarkTree, id: number): BookmarkTree {
   return { ...tree, nodes: removeFrom(tree.nodes, id) };
 }
 
+/** Removes every bookmark of `url` (the address bar's star: a page bookmarked twice is unstarred in one click). */
+export function removeByUrl(tree: BookmarkTree, url: string): BookmarkTree {
+  if (!findByUrl(tree, url)) return tree;
+  const walk = (list: BookmarkNode[]): BookmarkNode[] => list
+    .filter((n) => !(n.kind === 'url' && n.url === url))
+    .map((n) => n.kind === 'folder' ? { ...n, children: walk(n.children) } : n);
+  return { ...tree, nodes: walk(tree.nodes) };
+}
+
 /** A folder path as shown in menus and search results; a folder with no title (Chrome allows it) shows "Untitled". */
 function joinPath(prefix: string, title: string): string {
   const name = title || 'Untitled';

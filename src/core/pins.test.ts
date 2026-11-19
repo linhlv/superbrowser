@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { addPin, decodePins, forgetUnpinned, keyOf, movePin, pinKey, pinLabel, pinTarget, rememberShown, withFavicon, withTitle, usableFavicon } from './pins.ts';
+import { addPin, decodePins, forgetUnpinned, keyOf, movePin, pinKey, pinLabel, pinTarget, rememberShown, tabPinState, withFavicon, withTitle, usableFavicon } from './pins.ts';
 import type { Pin } from './pins.ts';
 
 const pin = (dir: string, url: string, title = 't'): Pin => ({ dir, url, title, favicon: null });
@@ -11,6 +11,13 @@ test('pinKey: http(s) host only, exact host', () => {
   assert.equal(pinKey('Default', 'http://localhost:3000/'), 'Default|localhost:3000');
   assert.equal(pinKey('Default', 'file:///etc'), null);
   assert.equal(pinKey('Default', 'not a url'), null);
+});
+test('tabPinState: pinned by host in the same profile only; non-web pages cannot be pinned', () => {
+  const pins = [pin('A', 'https://mail.google.com/1')];
+  assert.deepEqual(tabPinState(pins, 'A', 'https://mail.google.com/other'), { canPin: true, pinned: true });
+  assert.deepEqual(tabPinState(pins, 'B', 'https://mail.google.com/1'), { canPin: true, pinned: false });
+  assert.deepEqual(tabPinState(pins, 'A', 'https://google.com/'), { canPin: true, pinned: false });
+  assert.deepEqual(tabPinState(pins, 'A', 'about:blank'), { canPin: false, pinned: false });
 });
 test('addPin: appends, and updates an existing key in place', () => {
   const a = addPin([], pin('A', 'https://mail.google.com/1', 'one'));

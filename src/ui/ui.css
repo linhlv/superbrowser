@@ -52,6 +52,12 @@ body.collapsed #side { display: none; }
 .tab .x .ic { width: 12px; height: 12px; }
 .tab:hover .x, .tab:focus-visible .x { opacity: .7; }
 .tab .x:hover { background: rgba(127,127,127,.3); opacity: 1; }
+/* The pin button before the ×: like it on hover, and always shown (filled) while the tab's site is pinned. */
+.tab .pn { opacity: 0; border: 0; background: none; width: 20px; height: 20px; padding: 0; border-radius: 5px; flex: none; display: grid; place-items: center; }
+.tab .pn[hidden] { display: none; }
+.tab .pn .ic { width: 13px; height: 13px; }
+.tab:hover .pn, .tab:focus-visible .pn, .tab .pn.on { opacity: .7; }
+.tab .pn:hover { background: rgba(127,127,127,.3); opacity: 1; }
 #newtab { display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px 8px; border: 0; border-radius: 8px; background: none; text-align: left; opacity: .85; }
 #newtab:hover { background: rgba(255,255,255,.1); opacity: 1; }
 .nt-ic .ic { width: 16px; height: 16px; }

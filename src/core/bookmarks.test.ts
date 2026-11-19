@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   TOP_LEVEL, emptyTree, decodeTree, findNode, findByUrl, addBookmark, addFolder,
-  renameNode, moveNode, removeNode, folderChoices, flattenBookmarks, mergeChrome, ancestorFolders, searchBookmarks,
+  renameNode, moveNode, removeNode, removeByUrl, folderChoices, flattenBookmarks, mergeChrome, ancestorFolders, searchBookmarks,
 } from './bookmarks.ts';
 import type { ChromeBookmarks, ChromeNode } from './chromeLibrary.ts';
 
@@ -80,6 +80,16 @@ test('removeNode removes a folder with its contents', () => {
   assert.equal(findByUrl(r, 'https://r.test/w'), null);
   assert.ok(findByUrl(r, 'https://figma.com/'));
   assert.deepEqual(removeNode(t, 999), t);
+});
+
+test('removeByUrl removes every bookmark of the URL, in any folder, and keeps folders', () => {
+  const { t, daily } = sample();
+  const twice = addBookmark(t, { title: 'Gmail again', url: 'https://mail.google.com/' }, T0).tree;
+  const r = removeByUrl(twice, 'https://mail.google.com/');
+  assert.equal(findByUrl(r, 'https://mail.google.com/'), null);
+  assert.ok(findNode(r, daily));
+  assert.ok(findByUrl(r, 'https://figma.com/'));
+  assert.equal(removeByUrl(t, 'https://nope.test/'), t);
 });
 
 test('folderChoices lists Top Level then folder paths, minus the moving folder subtree', () => {

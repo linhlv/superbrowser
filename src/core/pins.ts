@@ -28,6 +28,12 @@ export function pinLabel(pin: { title: string; url: string; profileLabel: string
   return `${pin.title || pinHost(pin.url) || pin.url} · ${pin.profileLabel}`;
 }
 
+/** Whether a tab on `url` in profile `dir` can be pinned (a web page) and whether its site is pinned there. */
+export function tabPinState(pins: Pin[], dir: string, url: string): { canPin: boolean; pinned: boolean } {
+  const key = pinKey(dir, url);
+  return { canPin: key !== null, pinned: key !== null && pins.some((p) => keyOf(p) === key) };
+}
+
 export function keyOf(pin: Pin): string {
   return pinKey(pin.dir, pin.url) ?? `${pin.dir}|`;
 }

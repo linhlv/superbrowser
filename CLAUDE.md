@@ -33,7 +33,7 @@ scripts/make-icon.sh              # resources/Superbrowser.png → resources/ico
   - bookmarks and history: the bookmark tree (`bookmarks.ts`, `bookmarkStore.ts`), history queries and retention (`history.ts`), visit recording rules (`visits.ts`), accent-insensitive matching (`searchText.ts`), address-bar suggestions (`suggest.ts`), parsing Chrome's `Bookmarks`/`AccountBookmarks`/`History` and import planning (`chromeLibrary.ts`), bookmark and history context menus (`libraryMenus.ts`). `address.ts` also has `isWebUrl` and `googleSearchUrl`; `store.ts` has `writeFileAtomic`.
 - **`src/main/`**: thin Electron adapters wired together in `main.ts`:
   - `sessions.ts`: per-profile session, UA, permissions, frame preload, downloads.
-  - `tabManager.ts`: one `WebContentsView` per tab, lazy restore, muting; `showTab`/`showNewTab`/`tabsOf`/`faviconOf`/`titleOf` for pins; `onFullScreen` when a page enters or leaves HTML full screen.
+  - `tabManager.ts`: one `WebContentsView` per tab, lazy restore, muting; `showTab`/`showNewTab`/`tabsOf`/`faviconOf`/`titleOf` for pins; `onFullScreen` when a page enters or leaves HTML full screen. A tab's icon is not cleared on navigation (Chromium reports icons only when they change, so a reload reports none); until a page reports one, the tab shows the icon history saved for its URL or origin (`savedFavicon`, `HistoryDb.faviconForPage`).
   - `browserWindow.ts`: window, UI view, toolbar view (`Toolbar`), find bar, layout.
   - `pages.ts`: new windows, popups, context menu.
   - `profileManager.ts`: order (applies core `moveProfile`/`placeProfile`), hide/unhide, pill menu (incl. Set Display Name…).
@@ -70,7 +70,7 @@ Popups are separate small windows (registered in `pages.ts`, `isPopupWindow`). T
   - `windowOpenTarget` decides tab, popup or deny: `blob:` opens as a popup, and anything but http(s), `blob:` and `about:blank` is denied.
 - **Pages get no privileged API.**
   - `src/preload/frame.ts` is registered per profile session. It runs in subframes because page views set `nodeIntegrationInSubFrames` (sandboxed, so pages still get no Node). It must never expose an API, IPC or `contextBridge.exposeInMainWorld` to pages. It only wraps `navigator.credentials` and `NavigatorUAData` via `executeInMainWorld`; the functions it runs there are serialized, so they use only their arguments (no module scope).
-  - UI commands are listened for only on the UI, toolbar and find views' own `webContents.ipc`, and validated by `parseUiCommand`. The find view only accepts find commands; the toolbar view only back, forward, reload, navigate, suggest and its own height; the UI view not navigate, suggest or the toolbar height.
+  - UI commands are listened for only on the UI, toolbar and find views' own `webContents.ipc`, and validated by `parseUiCommand`. The find view only accepts find commands; the toolbar view only back, forward, reload, navigate, suggest, its own height and the bookmark star (`toggleBookmark`); the UI view not navigate, suggest, the toolbar height or the star.
   - Any `ipcMain` handler you add must reject senders that aren't the app's UI, toolbar or find views.
 - **Chrome data is read-only.**
   - Never write to `~/Library/Application Support/Google/Chrome/**` or the "Chrome Safe Storage" Keychain item.

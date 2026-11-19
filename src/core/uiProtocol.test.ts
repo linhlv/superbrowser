@@ -63,6 +63,8 @@ test('parseUiCommand: accepts every well-formed command and keeps only its field
     { type: 'selectPin', key: 'Default|a.com' },
     { type: 'pinMenu', key: 'Default|a.com' },
     { type: 'tabMenu', id: 3 },
+    { type: 'togglePinTab', id: 3 },
+    { type: 'toggleBookmark' },
     { type: 'setDisplayName', dir: 'Default', name: 'ACME' },
     { type: 'setSectionOpen', section: 'history', open: true },
     { type: 'setSectionOpen', section: 'bookmarks', open: false },
@@ -146,7 +148,7 @@ test('parseUiCommand: rejects bad setSectionOpen', () => {
 test('parseUiCommand: rejects bad pin and display-name commands', () => {
   for (const c of [
     { type: 'selectPin', key: '' }, { type: 'selectPin', key: 5 }, { type: 'selectPin' }, { type: 'pinMenu', key: 'x'.repeat(2049) },
-    { type: 'tabMenu', id: '3' },
+    { type: 'tabMenu', id: '3' }, { type: 'togglePinTab', id: '3' }, { type: 'togglePinTab' },
     { type: 'setDisplayName', dir: 'Profile 9', name: 'x' }, { type: 'setDisplayName', dir: 'Default', name: 'x'.repeat(201) },
   ]) assert.equal(parseUiCommand(c, known), null, JSON.stringify(c));
 });

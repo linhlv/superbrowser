@@ -16,12 +16,16 @@ const ICONS = {
   chevron: ['M9 18l6-6-6-6'],
   up: ['M18 15l-6-6-6 6'],
   down: ['M6 9l6 6 6-6'],
+  pin: [
+    'M12 17v5',
+    'M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z',
+  ],
   star: ['M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z'],
 } as const;
 
 export type IconName = keyof typeof ICONS;
 
-/** An `<svg class="ic ic-<name>">`; `filled` paints the shape instead of stroking it (the bookmark star). */
+/** An `<svg class="ic ic-<name>">`; `filled` also paints the shape (a bookmarked star, a pinned tab's pin). */
 export function icon(name: IconName, filled = false): SVGSVGElement {
   const svg = document.createElementNS(SVG, 'svg');
   svg.setAttribute('class', `ic ic-${name}`);

@@ -2,12 +2,12 @@ import path from 'node:path';
 import { app, BrowserWindow, clipboard, dialog, Menu, Notification, type WebContents, type WebContentsView } from 'electron';
 import { isWebUrl, toNavigableUrl } from '../core/address.ts';
 import {
-  addBookmark, addFolder, findByUrl, findNode, flattenBookmarks, folderChoices, moveNode, removeNode, renameNode, type BookmarkTree,
+  addBookmark, addFolder, findByUrl, findNode, flattenBookmarks, folderChoices, moveNode, removeByUrl, removeNode, renameNode, type BookmarkTree,
 } from '../core/bookmarks.ts';
 import type { HistoryEntry } from '../core/history.ts';
 import { chromeMajor, userAgent } from '../core/identity.ts';
 import {
-  addPin, forgetUnpinned, keyOf, movePin, pinKey, pinLabel, pinTarget, rememberShown, removePin, withFavicon, withTitle, type Pin,
+  addPin, forgetUnpinned, keyOf, movePin, pinKey, pinLabel, pinTarget, rememberShown, removePin, tabPinState, withFavicon, withTitle, type Pin,
 } from '../core/pins.ts';
 import { mergeProfiles, profileLabel, setDisplayName, withDisplayNames } from '../core/profiles.ts';
 import { createStore } from '../core/store.ts';
@@ -131,15 +131,24 @@ function start(): void {
     pushState = (): void => {
       if (ui.webContents.isDestroyed()) return;
       const snap = tabs.snapshot();
+      const canBookmark = snap.dir !== '' && isWebUrl(snap.url);
+      let bookmarked = false;
+      try {
+        bookmarked = canBookmark && findByUrl(library.bookmarks(snap.dir), snap.url) !== null;
+      } catch (e) {
+        log(`could not read the bookmarks of ${snap.dir}: ${e instanceof Error ? e.message : String(e)}`);
+      }
       const uiState: UiState = {
         profiles: barProfiles(profiles.visible, state.displayNames),
         pins: barPins(state.pins, profiles.visible, state.displayNames, snap),
         activeProfile: snap.dir,
-        tabs: snap.tabs,
+        tabs: snap.tabs.map((t) => ({ ...t, ...tabPinState(state.pins, snap.dir, t.url) })),
         activeTabId: snap.activeTabId,
         url: snap.url,
         canGoBack: snap.canGoBack,
         canGoForward: snap.canGoForward,
+        canBookmark,
+        bookmarked,
         sidebarVisible: state.sidebarVisible,
         showNames: state.showNames,
         openSections: state.openSections,
@@ -152,8 +161,11 @@ function start(): void {
     const toUi = (channel: string, ...args: unknown[]): void => {
       if (!ui.webContents.isDestroyed()) ui.webContents.send(channel, ...args);
     };
-    /** The shown profile's bookmarks or history changed: an open section refetches. */
-    const libraryChanged = (): void => toUi(IPC.libraryChanged);
+    /** The shown profile's bookmarks or history changed: an open section refetches, the address bar's star follows. */
+    const libraryChanged = (): void => {
+      toUi(IPC.libraryChanged);
+      pushState();
+    };
 
     const tabs: TabManager = new TabManager(window, () => {
       // Merge so tabs of profiles not loaded this run (hidden ones) are kept. Saved only when something saved
@@ -471,6 +483,21 @@ function start(): void {
       showPanel('bookmarks', 'show', highlight);
     };
 
+    /** The address bar's star, for the main window's active tab: bookmarks the page, or removes all its bookmarks. */
+    const toggleBookmark = (): void => {
+      const snap = tabs.snapshot();
+      const dir = snap.dir;
+      if (!dir || !isWebUrl(snap.url)) return;
+      const tree = library.bookmarks(dir);
+      if (findByUrl(tree, snap.url)) {
+        editBookmarks(dir, (t) => removeByUrl(t, snap.url));
+        return;
+      }
+      const title = snap.tabs.find((t) => t.id === snap.activeTabId)?.title || snap.url;
+      const added = addBookmark(tree, { title, url: snap.url }, Date.now());
+      if (added.id !== null) editBookmarks(dir, () => added.tree);
+    };
+
     const clearHistory = async (): Promise<void> => {
       const dir = shownDir();
       if (!dir || !await confirm(`Clear all history for ${profileName(dir)}?`, 'Clear History')) return;
@@ -660,6 +687,13 @@ function start(): void {
         }
         case 'pinMenu': showPinMenu(cmd.key); break;
         case 'tabMenu': showTabMenu(cmd.id); break;
+        case 'togglePinTab': {
+          const pin = pinOfTab(cmd.id);
+          if (pin) togglePin(pin);
+          else log(`ignored pinning tab ${cmd.id}: not in the shown profile`);
+          break;
+        }
+        case 'toggleBookmark': toggleBookmark(); break;
         case 'setDisplayName':
           state.displayNames = setDisplayName(state.displayNames, cmd.dir, cmd.name);
           store.save(state);
@@ -683,7 +717,7 @@ function start(): void {
     };
     const isFind = (cmd: UiCommand) => cmd.type === 'find' || cmd.type === 'findClose';
     /** Only the toolbar sends these; it also sends back, forward and reload, which the sidebar's menus don't need. */
-    const toolbarOnly = new Set<UiCommand['type']>(['navigate', 'suggest', 'toolbarHeight', 'toolbarClickThrough']);
+    const toolbarOnly = new Set<UiCommand['type']>(['navigate', 'suggest', 'toolbarHeight', 'toolbarClickThrough', 'toggleBookmark']);
     const isToolbar = (cmd: UiCommand) => toolbarOnly.has(cmd.type) || cmd.type === 'back' || cmd.type === 'forward' || cmd.type === 'reload';
     listen(ui, (cmd) => !isFind(cmd) && !toolbarOnly.has(cmd.type));
     listen(toolbar.view, isToolbar);

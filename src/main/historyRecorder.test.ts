@@ -113,3 +113,16 @@ test('onRecorded reports the profile of each recorded visit, revisit and title, 
   recorder.titled('Default', 'about:blank', 'New Tab'); // not a web page: nothing recorded
   assert.deepEqual(seen, ['Profile 2', 'Profile 2', 'Profile 2']);
 });
+
+test('savedFavicon: the page’s or its origin’s recorded icon, per profile; null when unknown or failing', () => {
+  recorder.opened('Default', 1, false);
+  recorder.navigated('Default', 1, nav('https://a.test/x', 0, ['https://a.test/x']));
+  recorder.favicon('Default', 'https://a.test/x', 'https://a.test/icon.png');
+  assert.equal(recorder.savedFavicon('Default', 'https://a.test/x'), 'https://a.test/icon.png');
+  assert.equal(recorder.savedFavicon('Default', 'https://a.test/other'), 'https://a.test/icon.png');
+  assert.equal(recorder.savedFavicon('Profile 2', 'https://a.test/x'), null, 'another profile has its own history');
+  assert.equal(recorder.savedFavicon('Default', 'about:blank'), null);
+  const broken = new HistoryRecorder({ history: (): never => { throw new Error('disk on fire'); } }, (m) => logs.push(m), () => now);
+  assert.equal(broken.savedFavicon('Default', 'https://a.test/x'), null);
+  assert.ok(logs.some((m) => m.includes('disk on fire')));
+});

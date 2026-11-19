@@ -190,6 +190,26 @@ export class HistoryDb {
     });
   }
 
+  /**
+   * The icon to show for a page before it reports one (a tab not loaded yet): the page's own, else the one of the page
+   * on the same origin visited last. Null for non-web URLs or when none is known.
+   */
+  faviconForPage(url: string): string | null {
+    if (!isWebUrl(url)) return null;
+    const own = this.stmt('SELECT favicon FROM urls WHERE url = ? AND favicon IS NOT NULL').get(url) as { favicon: string } | undefined;
+    if (own) return own.favicon;
+    let origin: string;
+    try {
+      origin = new URL(url).origin;
+    } catch {
+      return null;
+    }
+    // Every URL under `<origin>/`: '/' + 1 is '0', so the range is exactly that prefix and uses the url index.
+    const r = this.stmt(`SELECT favicon FROM urls WHERE url >= ? AND url < ? AND favicon IS NOT NULL
+      ORDER BY last_visit DESC LIMIT 1`).get(origin + '/', origin + '0') as { favicon: string } | undefined;
+    return r?.favicon ?? null;
+  }
+
   faviconsFor(urls: string[]): Record<string, string> {
     const out: Record<string, string> = {};
     const s = this.stmt('SELECT favicon FROM urls WHERE url = ?');

@@ -140,6 +140,20 @@ test('faviconsFor returns known favicons', () => {
   assert.equal(db.page('', null, 10, 0).rows.find((r) => r.url === 'https://a.test/')?.favicon, 'data:image/png;base64,AA');
 });
 
+test('faviconForPage: the page’s own icon, else the last visited page of the same origin', () => {
+  db.recordVisit('https://a.test/x', T0, false); db.setFavicon('https://a.test/x', 'https://a.test/x.ico');
+  db.recordVisit('https://a.test/y', T0 + 9, false); db.setFavicon('https://a.test/y', 'https://a.test/y.ico');
+  db.recordVisit('https://a.test/z', T0 + 99, false); // newest, but no icon
+  db.recordVisit('https://a.test.evil/', T0 + 999, false); db.setFavicon('https://a.test.evil/', 'evil');
+  db.recordVisit('https://a.test:8443/', T0 + 999, false); db.setFavicon('https://a.test:8443/', 'other port');
+  assert.equal(db.faviconForPage('https://a.test/x'), 'https://a.test/x.ico');
+  assert.equal(db.faviconForPage('https://a.test/new'), 'https://a.test/y.ico');
+  assert.equal(db.faviconForPage('https://a.test/z'), 'https://a.test/y.ico');
+  assert.equal(db.faviconForPage('http://a.test/x'), null, 'another scheme is another origin');
+  assert.equal(db.faviconForPage('https://b.test/'), null);
+  assert.equal(db.faviconForPage('about:blank'), null);
+});
+
 test('a corrupt database is set aside and recreated', () => {
   const file = join(dir, 'bad', 'history.db');
   const dir2 = join(dir, 'bad');

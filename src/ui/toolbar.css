@@ -28,6 +28,20 @@ button { font: inherit; color: inherit; cursor: default; }
   background: rgba(255,255,255,.14); color: #fff; font: inherit; outline: none;
 }
 #address::placeholder { color: rgba(255,255,255,.7); }
+/* The bookmark star inside the field's right end: a flex sibling pulled back over the field (not a positioned wrapper,
+   which would change the field's offsetParent and so where the suggestions card lines up). */
+#address { padding-right: 36px; }
+#star {
+  -webkit-app-region: no-drag; position: relative; flex: none; width: 26px; height: 26px; margin: 0 2px 0 -36px; padding: 0;
+  border: 0; border-radius: 6px; background: none; display: grid; place-items: center; opacity: .85;
+}
+#star[hidden] { display: none; }
+#star .ic { width: 16px; height: 16px; }
+#star:hover { background: rgba(255,255,255,.18); opacity: 1; }
+#star.on { color: #ffd54a; opacity: 1; }
+#address:focus + #star { color: #555; }
+#address:focus + #star:hover { background: rgba(0,0,0,.08); }
+#address:focus + #star.on { color: #b07800; }
 #address:focus { background: rgba(255,255,255,.95); color: #111; }
 #address:focus::placeholder { color: rgba(0,0,0,.4); }
 

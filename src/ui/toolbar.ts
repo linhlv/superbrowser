@@ -1,6 +1,6 @@
 import type { SuperbrowserApi } from '../preload/ui.ts';
 import { setupSuggestions } from './parts/suggestions.ts';
-import { fillIcons } from './parts/icons.ts';
+import { fillIcons, icon } from './parts/icons.ts';
 import type { UiState } from '../shared/types.ts';
 
 declare global {
@@ -19,6 +19,7 @@ const list = byId('suggest');
 const backBtn = byId<HTMLButtonElement>('back');
 const forwardBtn = byId<HTMLButtonElement>('forward');
 const reloadBtn = byId<HTMLButtonElement>('reload');
+const starBtn = byId<HTMLButtonElement>('star');
 
 let current: UiState | null = null;
 fillIcons(document);
@@ -56,6 +57,21 @@ document.addEventListener('mousedown', (e) => {
 backBtn.addEventListener('click', () => sb.send({ type: 'back' }));
 forwardBtn.addEventListener('click', () => sb.send({ type: 'forward' }));
 reloadBtn.addEventListener('click', () => sb.send({ type: 'reload' }));
+// Bookmarks the page, or (filled) removes its bookmarks. A press must not take focus from the field being edited.
+starBtn.addEventListener('mousedown', (e) => e.preventDefault());
+starBtn.addEventListener('click', () => sb.send({ type: 'toggleBookmark' }));
+
+function setStar(s: UiState): void {
+  starBtn.hidden = !s.canBookmark;
+  const state = s.bookmarked ? 'on' : 'off';
+  if (starBtn.dataset['state'] === state) return;
+  starBtn.dataset['state'] = state;
+  starBtn.classList.toggle('on', s.bookmarked);
+  starBtn.replaceChildren(icon('star', s.bookmarked));
+  starBtn.title = s.bookmarked ? 'Remove Bookmark' : 'Bookmark This Page ⌘D';
+  starBtn.setAttribute('aria-label', s.bookmarked ? 'Remove bookmark' : 'Bookmark this page');
+  starBtn.setAttribute('aria-pressed', String(s.bookmarked));
+}
 
 sb.onState((s) => {
   if (current !== null && current.activeProfile !== s.activeProfile) suggestions.close();
@@ -64,4 +80,5 @@ sb.onState((s) => {
   backBtn.disabled = !s.canGoBack;
   forwardBtn.disabled = !s.canGoForward;
   reloadBtn.disabled = s.activeTabId === null;
+  setStar(s);
 });

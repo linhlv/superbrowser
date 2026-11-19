@@ -4,7 +4,10 @@ export type UiPin = {
   key: string; dir: string; title: string; url: string; favicon: string | null;
   color: string; profileLabel: string; shortcut: number | null; active: boolean;
 };
-export type UiTab = { id: number; title: string; url: string; favicon: string | null; loading: boolean };
+/** A tab as TabManager knows it; `favicon` is the page's, or one remembered from history until the page reports its own. */
+export type TabInfo = { id: number; title: string; url: string; favicon: string | null; loading: boolean };
+/** `canPin`: a web page; `pinned`: its site is pinned in this profile (the row's pin button). */
+export type UiTab = TabInfo & { canPin: boolean; pinned: boolean };
 
 export type DownloadState = { id: string; dir: string; filename: string; path: string; state: 'progressing' | 'completed' | 'cancelled' | 'interrupted'; received: number; total: number };
 export type UiState = {
@@ -13,6 +16,8 @@ export type UiState = {
   activeProfile: string;
   tabs: UiTab[]; activeTabId: number | null;
   url: string; canGoBack: boolean; canGoForward: boolean;
+  /** The address bar's star: the shown page can be bookmarked (a web page) and is bookmarked in this profile. */
+  canBookmark: boolean; bookmarked: boolean;
   sidebarVisible: boolean; showNames: boolean;
   downloads: DownloadState[];   // the shown profile's only
   openSections: Section[];
@@ -33,6 +38,10 @@ export type UiCommand =
   | { type: 'renameBookmark'; id: number; title: string }
   | { type: 'selectPin'; key: string } | { type: 'pinMenu'; key: string }
   | { type: 'tabMenu'; id: number } | { type: 'setDisplayName'; dir: string; name: string }
+  /** The tab row's pin button: pins the tab's site in the shown profile, or unpins it. */
+  | { type: 'togglePinTab'; id: number }
+  /** The address bar's star: bookmarks the shown page, or removes its bookmarks. */
+  | { type: 'toggleBookmark' }
   | { type: 'setSectionOpen'; section: Section; open: boolean }
   /** The toolbar view's height: the strip, or taller while the address suggestions are open. */
   | { type: 'toolbarHeight'; height: number }

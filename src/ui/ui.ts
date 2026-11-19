@@ -86,13 +86,17 @@ new ResizeObserver(revealActiveTab).observe(byId('tabs'));
 
 function createTabRow(id: number): HTMLElement {
   const row = el('div', 'tab');
+  // Before the ×: pins the tab's site to the bottom bar (or unpins it). Shown on hover, and always while pinned.
+  const pin = el('button', 'pn');
+  pin.tabIndex = -1; // like the ×: one Tab stop per row; the row's menu and Tab › Pinned to Bar do it from the keyboard
   const close = el('button', 'x');
   close.append(icon('close'));
   close.title = 'Close Tab';
   close.setAttribute('aria-label', 'Close tab');
   close.tabIndex = -1; // one Tab stop per row: Enter selects the tab, then ⌘W closes it (or use the row's menu)
-  row.append(el('span', 'icon ph'), el('span', 't'), close);
+  row.append(el('span', 'icon ph'), el('span', 't'), pin, close);
   row.addEventListener('click', () => sb.send({ type: 'selectTab', id }));
+  pin.addEventListener('click', (e) => { e.stopPropagation(); sb.send({ type: 'togglePinTab', id }); });
   close.addEventListener('click', (e) => { e.stopPropagation(); sb.send({ type: 'closeTab', id }); });
   row.addEventListener('contextmenu', (e) => { e.preventDefault(); sb.send({ type: 'tabMenu', id }); }); // Pin to Bar, Close Tab
   activatable(row);
@@ -107,9 +111,22 @@ function setIcon(row: HTMLElement, favicon: string | null): void {
   row.querySelector('.icon')!.replaceWith(faviconIcon(src));
 }
 
+function setPinButton(row: HTMLElement, tab: UiTab): void {
+  const pin = row.querySelector<HTMLButtonElement>('.pn')!;
+  pin.hidden = !tab.canPin;
+  const state = tab.pinned ? 'on' : 'off';
+  if (pin.dataset['state'] === state) return;
+  pin.dataset['state'] = state;
+  pin.classList.toggle('on', tab.pinned);
+  pin.replaceChildren(icon('pin', tab.pinned));
+  pin.title = tab.pinned ? 'Unpin from Bar' : 'Pin to Bar';
+  pin.setAttribute('aria-label', pin.title);
+}
+
 function updateTabRow(row: HTMLElement, tab: UiTab, active: boolean): void {
   markCurrent(row, active);
   setIcon(row, tab.favicon);
+  setPinButton(row, tab);
   const label = tab.title || tab.url || 'New Tab';
   const text = (tab.loading ? '⋯ ' : '') + label;
   const t = row.querySelector('.t')!;

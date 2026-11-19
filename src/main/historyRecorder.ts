@@ -9,6 +9,8 @@ export type VisitSink = {
   titled(dir: string, url: string, title: string): void;
   favicon(dir: string, url: string, favicon: string): void;
   closed(tabId: number): void;
+  /** The icon history remembers for `url` (its own, else its origin's), shown until the page reports one; null if none. */
+  savedFavicon(dir: string, url: string): string | null;
 };
 
 /**
@@ -59,6 +61,13 @@ export class HistoryRecorder implements VisitSink {
   favicon(dir: string, url: string, favicon: string): void {
     if (!isWebUrl(url)) return;
     this.guard(`recording a favicon in ${dir}`, () => this.library.history(dir).setFavicon(url, favicon));
+  }
+
+  savedFavicon(dir: string, url: string): string | null {
+    if (!isWebUrl(url)) return null;
+    let icon: string | null = null;
+    this.guard(`reading a favicon in ${dir}`, () => { icon = this.library.history(dir).faviconForPage(url); });
+    return icon;
   }
 
   closed(tabId: number): void {

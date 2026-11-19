@@ -86,6 +86,7 @@ export function parseUiCommand(raw: unknown, knownDirs: ReadonlySet<string>): Ui
     case 'pinMenu':
       return typeof raw['key'] === 'string' && raw['key'] !== '' && raw['key'].length <= 2048 ? { type, key: raw['key'] } : null;
     case 'tabMenu':
+    case 'togglePinTab':
       return Number.isInteger(id) ? { type, id: id as number } : null;
     case 'setDisplayName':
       return dir !== null && isText(raw['name'], 200) ? { type, dir, name: raw['name'] } : null;
@@ -107,6 +108,7 @@ export function parseUiCommand(raw: unknown, knownDirs: ReadonlySet<string>): Ui
     case 'reload':
     case 'toggleSidebar':
     case 'findClose':
+    case 'toggleBookmark':
       return { type };
     default:
       return null;

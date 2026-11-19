@@ -1,12 +1,12 @@
 import { WebContentsView, type BrowserWindow, type WebContents } from 'electron';
-import { toNavigableUrl } from '../core/address.ts';
+import { sameOrigin, toNavigableUrl } from '../core/address.ts';
 import type { Rect, SavedTabs } from '../core/appState.ts';
 import {
   activateTab, closeTab, emptyTabs, fromSaved, openTab, reopenClosed, tabIdForShortcut, toSaved, updateTab,
   type ProfileTabs, type TabRecord,
 } from '../core/tabs.ts';
 import type { Nav } from '../core/visits.ts';
-import type { UiTab } from '../shared/types.ts';
+import type { TabInfo } from '../shared/types.ts';
 import type { VisitSink } from './historyRecorder.ts';
 import { ERR_ABORTED, wirePage, type PageHost } from './pages.ts';
 import { pageWebPreferences } from './sessions.ts';
@@ -45,6 +45,11 @@ export class TabManager {
   private readonly visits: VisitSink;
   /** Told when a tab's page enters or leaves HTML full screen (it then covers the whole window). */
   onFullScreen: ((on: boolean) => void) | null = null;
+  /**
+   * Icons history remembers per `dir\nurl`, for tabs whose page hasn't reported one (not loaded yet, or just created).
+   * Cleared whenever a page reports an icon, so a newly recorded one is picked up.
+   */
+  private readonly savedIcons = new Map<string, string | null>();
   /** Tabs from saved state or reopened, whose first load (when their view is created) is not a new visit. */
   private readonly restoredIds = new Set<number>();
 
@@ -184,9 +189,27 @@ export class TabManager {
     return this.profiles.get(dir)?.tabs.find((t) => t.id === id)?.title ?? '';
   }
 
-  /** The tab's current favicon (null until its page reports one, or if it has no view yet). */
+  /** The tab's favicon: its page's, else the one history remembers for its URL (null if neither is known). */
   faviconOf(id: number): string | null {
-    return this.live.get(id)?.favicon ?? null;
+    const dir = this.dirOf(id);
+    const tab = dir === null ? undefined : this.profiles.get(dir)?.tabs.find((t) => t.id === id);
+    return dir === null || !tab ? null : this.iconOf(dir, tab);
+  }
+
+  /**
+   * A tab not loaded yet (lazy restore) has no page to report an icon, and a new page reports its own only once loaded:
+   * meanwhile the tab shows the icon history last saw for its URL or site, rather than none.
+   */
+  private iconOf(dir: string, tab: TabRecord): string | null {
+    const own = this.live.get(tab.id)?.favicon;
+    if (own) return own;
+    const key = `${dir}\n${tab.url}`;
+    let saved = this.savedIcons.get(key);
+    if (saved === undefined) {
+      saved = this.visits.savedFavicon(dir, tab.url);
+      this.savedIcons.set(key, saved);
+    }
+    return saved;
   }
 
   /**
@@ -258,8 +281,9 @@ export class TabManager {
     return id === undefined ? null : openContents(this.views.get(id));
   }
 
-  snapshot(): { dir: string; tabs: UiTab[]; activeTabId: number | null; url: string; canGoBack: boolean; canGoForward: boolean } {
-    const tabs = this.activeDir === null ? emptyTabs() : this.profiles.get(this.activeDir)!;
+  snapshot(): { dir: string; tabs: TabInfo[]; activeTabId: number | null; url: string; canGoBack: boolean; canGoForward: boolean } {
+    const dir = this.activeDir;
+    const tabs = dir === null ? emptyTabs() : this.profiles.get(dir)!;
     const history = this.activeWebContents()?.navigationHistory;
     return {
       dir: this.activeDir ?? '',
@@ -267,7 +291,7 @@ export class TabManager {
         id: t.id,
         title: t.title,
         url: t.url,
-        favicon: this.live.get(t.id)?.favicon ?? null,
+        favicon: dir === null ? null : this.iconOf(dir, t),
         loading: this.live.get(t.id)?.loading ?? false,
       })),
       activeTabId: tabs.activeId,
@@ -403,20 +427,22 @@ export class TabManager {
       patch({ title });
       this.visits.titled(dir, wc.getURL(), title);
     });
-    wc.on('did-navigate', (_e, url) => {
-      if (!current()) return;
-      const entry = this.live.get(id);
-      if (entry) entry.favicon = null;
+    // The icon is not cleared on navigation: Chromium reports a page's icons only when they differ from the previous
+    // page's (a reload, or another page of the same site, reports nothing), so the last icons reported are the shown
+    // page's. Clearing them left such tabs with no icon. Within a site the new page's history entry gets that icon
+    // too; on another site it is only shown until that site's own icons arrive, never recorded for it.
+    const navigated = (url: string) => {
+      const from = this.profiles.get(dir)?.tabs.find((t) => t.id === id)?.url ?? '';
       patch({ url });
       this.visits.navigated(dir, id, navOf(wc, url));
-    });
-    wc.on('did-navigate-in-page', (_e, url, isMainFrame) => {
-      if (!current() || !isMainFrame) return;
-      patch({ url });
-      this.visits.navigated(dir, id, navOf(wc, url));
-    });
+      const icon = this.live.get(id)?.favicon;
+      if (icon && sameOrigin(from, url)) this.visits.favicon(dir, url, icon);
+    };
+    wc.on('did-navigate', (_e, url) => { if (current()) navigated(url); });
+    wc.on('did-navigate-in-page', (_e, url, isMainFrame) => { if (current() && isMainFrame) navigated(url); });
     wc.on('page-favicon-updated', (_e, favicons) => {
       if (!current()) return;
+      this.savedIcons.clear();
       setLive({ favicon: favicons[0] ?? null });
       if (favicons[0]) this.visits.favicon(dir, wc.getURL(), favicons[0]);
     });

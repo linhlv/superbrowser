@@ -28,3 +28,13 @@ export function isWebUrl(url: string): boolean {
     return false;
   }
 }
+
+/** Both are web pages of the same origin (scheme, host and port). */
+export function sameOrigin(a: string, b: string): boolean {
+  if (!isWebUrl(a) || !isWebUrl(b)) return false;
+  try {
+    return new URL(a).origin === new URL(b).origin;
+  } catch {
+    return false;
+  }
+}
