@@ -35,7 +35,7 @@ scripts/make-icon.sh              # resources/Superbrowser.png → resources/ico
   - `tabManager.ts`: one `WebContentsView` per tab, lazy restore, muting.
   - `browserWindow.ts`: window, UI view, find bar, layout.
   - `pages.ts`: new windows, popups, context menu.
-  - `profileManager.ts`: order (applies core `moveProfile`/`placeProfile`), hide/unhide, dot menu.
+  - `profileManager.ts`: order (applies core `moveProfile`/`placeProfile`), hide/unhide, pill menu (incl. Set Display Name…).
   - `importer.ts` and `importFlow.ts`: login import and its sheets.
   - `menu.ts`: the application menu and every shortcut. It is the source of truth for shortcuts.
   - `chrome.ts`: reads Chrome's `Local State`; opens a profile in Chrome.
@@ -87,7 +87,7 @@ Popups are separate small windows (registered in `pages.ts`, `isPopupWindow`). T
 - **State:** `state.json` decodes tolerantly. A bad or missing field falls back to its default without losing the others, a corrupt file is set aside, and writes are atomic. v1's `settings.json` next to it is ignored.
 - **Lazy restore:** after launch, only each visible profile's active tab loads: the shown one at once, the others hidden, 300 ms apart (`loadActiveTabs`). Other tabs, and hidden profiles' tabs, load when first shown. Within a run, tabs are never unloaded, and switching tab or profile never reloads.
 - **Closing tabs:** a tab closes through `webContents.close({ waitForBeforeUnload: true })` and leaves the model only when its page is destroyed, so "Stay" on the "Leave site?" sheet (`will-prevent-unload`, in `wirePage`) keeps it. After a page is destroyed Electron drops the view's `webContents` (it reads `undefined`): go through `openContents(view)`. Nothing that runs while the window closes may change the saved tabs.
-- **State saves:** the store writes at most 2 s after the first unsaved change, however often `save` is called; tab events that change nothing saved (loading, favicons) don't save.
+- **State saves:** the store writes at most 2 s after the first unsaved change, however often `save` is called; tab events that change nothing saved (loading, favicons) don't save, except a favicon change that updates a pin's stored icon.
 - **Display names:** live only in `state.displayNames`; Chrome's profile names are never written.
 - **Pins:** a pin carries its own `dir` and opens only in that profile (through the normal per-profile tab path).
 - **Hidden profiles:** their tab views keep running but are muted (`setAudioMuted`) while hidden.
