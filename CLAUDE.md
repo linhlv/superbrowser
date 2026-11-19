@@ -25,7 +25,7 @@ scripts/make-icon.sh              # resources/Superbrowser.png → resources/ico
 
 - **`src/core/`**: pure logic, unit-tested under plain Node. It must **never import `electron`**. Covers:
   - address parsing, UA/client hints, Chrome profile parsing and merging;
-  - state decode and atomic store, the tab model, layout maths, drag-to-reorder slot maths (`dragOrder.ts`);
+  - state decode and atomic store, the tab model, layout maths, drag-to-reorder slot maths (`dragOrder.ts`) and keyed row reordering with fewest moves (`reorder.ts`);
   - cookie decryption and import planning, the permission policy and prompt queue;
   - download names and the per-profile downloads list, context-menu spec, popup titles, UI command validation (`uiProtocol.ts`);
   - bookmarks and history: the bookmark tree (`bookmarks.ts`, `bookmarkStore.ts`), history queries and retention (`history.ts`), visit recording rules (`visits.ts`), accent-insensitive matching (`searchText.ts`), address-bar suggestions (`suggest.ts`), parsing Chrome's `Bookmarks`/`AccountBookmarks`/`History` and import planning (`chromeLibrary.ts`), bookmark and history context menus (`libraryMenus.ts`). `address.ts` also has `isWebUrl` and `googleSearchUrl`; `store.ts` has `writeFileAtomic`.
@@ -34,7 +34,7 @@ scripts/make-icon.sh              # resources/Superbrowser.png → resources/ico
   - `tabManager.ts`: one `WebContentsView` per tab, lazy restore, muting.
   - `browserWindow.ts`: window, UI view, find bar, layout.
   - `pages.ts`: new windows, popups, context menu.
-  - `profileManager.ts`: order (`moveProfile`, `placeProfile` for drag), hide/unhide, dot menu.
+  - `profileManager.ts`: order (applies core `moveProfile`/`placeProfile`), hide/unhide, dot menu.
   - `importer.ts` and `importFlow.ts`: login import and its sheets.
   - `menu.ts`: the application menu and every shortcut. It is the source of truth for shortcuts.
   - `chrome.ts`: reads Chrome's `Local State`; opens a profile in Chrome.

@@ -1,6 +1,6 @@
 # Superbrowser
 
-A macOS browser that shows every Chrome profile in one ordinary window. It has an Arc-style sidebar with the tabs of the current profile and a slim profile bar at the bottom: click a profile's dot or press ⌃1…⌃9 to switch. Each profile has its own isolated storage, so every profile stays signed in to its own accounts at the same time. Profile names, colours and order come from Chrome, and logins, bookmarks and history can be imported from Chrome so you don't start over. Superbrowser is built on Electron (Chromium) and presents itself to sites as Google Chrome.
+A macOS browser that shows every Chrome profile in one ordinary window. It has an Arc-style sidebar with the tabs of the current profile and a slim profile bar at the bottom: click a profile's dot or press ⌃1…⌃9 to switch. Each profile has its own isolated storage, so every profile stays signed in to its own accounts at the same time. Profile names and colours come from Chrome; the bar order is your own. Logins, bookmarks and history can be imported from Chrome so you don't start over. Superbrowser is built on Electron (Chromium) and presents itself to sites as Google Chrome.
 
 Requires macOS on Apple Silicon, Google Chrome (for profiles and login import), Node 22 and the Command Line Tools (no Xcode).
 

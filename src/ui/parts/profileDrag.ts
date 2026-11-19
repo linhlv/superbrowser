@@ -1,4 +1,5 @@
 import { dropBefore, dropIndex, slotShift } from '../../core/dragOrder.ts';
+import { keyedMoves } from '../../core/reorder.ts';
 
 type ReorderCommand = { type: 'reorderProfile'; dir: string; before: string | null };
 
@@ -30,6 +31,7 @@ type Press = {
   /** Where the press started, in the bar's content coordinates (survives edge scrolling). */
   startX: number;
   clientX: number;
+  clientY: number;
   drag: Drag | null;
   /** A drag happened during this press (even if Esc ended it), so the click that follows is not a switch. */
   dragged: boolean;
@@ -38,10 +40,14 @@ type Press = {
 /**
  * Drag a profile pill along `bar` (`#profiles`) to reorder it. Delegated on the bar, so pills rebuilt by a state
  * push keep working. The others slide to open a gap; a release in the bottom bar sends one `reorderProfile` and
- * leaves the DOM in the new order, which the following state push rebuilds identically. Esc, a cancelled or lost
- * pointer, or a release outside the bottom bar puts everything back and sends nothing.
+ * leaves the DOM in the new order, which the following state push keeps. Esc, a right-click, a cancelled or lost
+ * pointer, or a release outside the bottom bar puts everything back and sends nothing; `cancel()` does the same
+ * (the caller uses it when the pills change mid-drag).
  */
-export function setupProfileDrag(opts: { bar: HTMLElement; send: (cmd: ReorderCommand) => void }): { suppressClick(): boolean } {
+export function setupProfileDrag(opts: { bar: HTMLElement; send: (cmd: ReorderCommand) => void }): {
+  suppressClick(): boolean;
+  cancel(): void;
+} {
   const { bar, send } = opts;
   /** The bottom bar: releasing anywhere in it drops; releasing outside (above it) cancels. */
   const zone = bar.parentElement ?? bar;
@@ -49,6 +55,10 @@ export function setupProfileDrag(opts: { bar: HTMLElement; send: (cmd: ReorderCo
   let suppress = false;
 
   const contentX = (clientX: number): number => clientX - bar.getBoundingClientRect().left + bar.scrollLeft;
+  const inZone = (clientX: number, clientY: number): boolean => {
+    const z = zone.getBoundingClientRect();
+    return clientX >= z.left && clientX <= z.right && clientY >= z.top && clientY <= z.bottom;
+  };
 
   function begin(p: Press): void {
     const pills = Array.from(bar.children).filter((c): c is HTMLElement => c instanceof HTMLElement && c.classList.contains('pf'));
@@ -81,14 +91,17 @@ export function setupProfileDrag(opts: { bar: HTMLElement; send: (cmd: ReorderCo
     update(p);
   }
 
-  /** Moves the dragged pill under the pointer and slides the others to open the gap at the drop slot. */
+  /**
+   * Moves the dragged pill under the pointer and slides the others to open the gap at the drop slot. Outside the
+   * bottom bar a release cancels, so the others slide back to show the original slot.
+   */
   function update(p: Press): void {
     const d = p.drag;
     if (!d) return;
     const x = contentX(p.clientX);
     const dx = Math.min(d.maxDx, Math.max(d.minDx, x - p.startX));
     p.pill.style.transform = `translateX(${dx}px)`;
-    const to = dropIndex(d.mids, d.from, x);
+    const to = inZone(p.clientX, p.clientY) ? dropIndex(d.mids, d.from, x) : d.from;
     if (to === d.to) return;
     d.to = to;
     d.pills.forEach((pill, i) => {
@@ -145,7 +158,9 @@ export function setupProfileDrag(opts: { bar: HTMLElement; send: (cmd: ReorderCo
     }
     const pill = e.target instanceof Element ? e.target.closest<HTMLElement>('.pf') : null;
     if (!pill || pill.parentElement !== bar) return;
-    press = { pointerId: e.pointerId, pill, startX: contentX(e.clientX), clientX: e.clientX, drag: null, dragged: false };
+    press = {
+      pointerId: e.pointerId, pill, startX: contentX(e.clientX), clientX: e.clientX, clientY: e.clientY, drag: null, dragged: false,
+    };
   });
 
   window.addEventListener('pointermove', (e) => {
@@ -153,6 +168,7 @@ export function setupProfileDrag(opts: { bar: HTMLElement; send: (cmd: ReorderCo
     if (!p || e.pointerId !== p.pointerId) return;
     if ((e.buttons & 1) === 0) { end(p); return; } // released somewhere we never heard about
     p.clientX = e.clientX;
+    p.clientY = e.clientY;
     if (p.drag) update(p);
     else if (!p.dragged && Math.abs(contentX(e.clientX) - p.startX) >= DRAG_THRESHOLD_PX) begin(p);
   });
@@ -161,14 +177,19 @@ export function setupProfileDrag(opts: { bar: HTMLElement; send: (cmd: ReorderCo
     const p = press;
     if (!p || e.pointerId !== p.pointerId) return;
     const d = p.drag;
-    const z = zone.getBoundingClientRect();
-    const inside = e.clientX >= z.left && e.clientX <= z.right && e.clientY >= z.top && e.clientY <= z.bottom;
+    const inside = inZone(e.clientX, e.clientY);
     end(p);
     if (!d || !inside || d.to === d.from) return;
+    const dir = d.dirs[d.from]!;
     const before = dropBefore(d.dirs, d.from, d.to);
-    // Same frame as clearing the transforms: the pill sits in its new slot, so nothing jumps.
-    bar.insertBefore(p.pill, before === null ? null : d.pills[d.dirs.indexOf(before)]!);
-    send({ type: 'reorderProfile', dir: d.dirs[d.from]!, before });
+    const desired = d.dirs.filter((x) => x !== dir);
+    desired.splice(before === null ? desired.length : desired.indexOf(before), 0, dir);
+    // Same frame as clearing the transforms: the pills sit in their new slots, so nothing jumps. The dropped pill
+    // (under the pointer) stays where it is in the DOM so it keeps its hover; the others move around it.
+    for (const m of keyedMoves(d.dirs, desired, dir)) {
+      bar.insertBefore(d.pills[d.dirs.indexOf(m.key)]!, m.before === null ? null : d.pills[d.dirs.indexOf(m.before)]!);
+    }
+    send({ type: 'reorderProfile', dir, before });
   });
 
   window.addEventListener('pointercancel', (e) => {
@@ -181,7 +202,18 @@ export function setupProfileDrag(opts: { bar: HTMLElement; send: (cmd: ReorderCo
     if (press?.drag && e.pointerId === press.pointerId) stop(press);
   });
 
+  // A right-click while dragging cancels the drag instead of opening the profile menu.
+  window.addEventListener('contextmenu', (e) => {
+    if (!press?.drag) return;
+    e.preventDefault();
+    e.stopPropagation();
+    stop(press);
+  }, true);
+
   return {
+    cancel(): void {
+      if (press?.drag) stop(press);
+    },
     suppressClick(): boolean {
       const was = suppress;
       suppress = false;
