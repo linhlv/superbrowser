@@ -1,0 +1,122 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import {
+  TOP_LEVEL, emptyTree, decodeTree, findNode, findByUrl, addBookmark, addFolder,
+  renameNode, moveNode, removeNode, folderChoices, flattenBookmarks,
+} from './bookmarks.ts';
+
+const T0 = 1_700_000_000_000;
+function sample() { // Daily(Gmail, Reports(Weekly)), Figma
+  let t = emptyTree();
+  const daily = addFolder(t, TOP_LEVEL, 'Daily', T0); t = daily.tree;
+  const reports = addFolder(t, daily.id!, 'Reports', T0); t = reports.tree;
+  t = addBookmark(t, { title: 'Weekly', url: 'https://r.test/w' }, T0).tree; t = moveNode(t, findByUrl(t, 'https://r.test/w')!.id, reports.id!);
+  t = addBookmark(t, { title: 'Gmail', url: 'https://mail.google.com/' }, T0).tree; t = moveNode(t, findByUrl(t, 'https://mail.google.com/')!.id, daily.id!);
+  t = addBookmark(t, { title: 'Figma', url: 'https://figma.com/' }, T0).tree;
+  return { t, daily: daily.id!, reports: reports.id! };
+}
+
+test('addBookmark puts it first at the top level with a new id', () => {
+  const { t } = sample();
+  assert.equal(t.nodes[0]!.title, 'Figma');
+  const a = addBookmark(t, { title: 'A', url: 'https://a.test/' }, T0);
+  const b = addBookmark(a.tree, { title: 'B', url: 'https://b.test/' }, T0);
+  assert.ok(a.id !== null && b.id !== null && b.id > a.id);
+  assert.equal(b.tree.nodes[0]!.id, b.id);
+  assert.equal(t.nodes.length, 2, 'input unchanged');
+});
+
+test('addBookmark refuses non-web URLs', () => {
+  const t = emptyTree();
+  for (const url of ['about:blank', 'data:text/html,x']) {
+    const r = addBookmark(t, { title: 'x', url }, T0);
+    assert.equal(r.id, null);
+    assert.deepEqual(r.tree, t);
+  }
+});
+
+test('addFolder refuses an unknown or non-folder parent; empty title becomes New Folder', () => {
+  const { t } = sample();
+  const fig = findByUrl(t, 'https://figma.com/')!;
+  assert.equal(addFolder(t, 999, 'X', T0).id, null);
+  assert.equal(addFolder(t, fig.id, 'X', T0).id, null);
+  const r = addFolder(t, TOP_LEVEL, '   ', T0);
+  assert.equal(r.tree.nodes[0]!.title, 'New Folder');
+});
+
+test('findByUrl finds nested bookmarks', () => {
+  const { t, reports } = sample();
+  const n = findByUrl(t, 'https://r.test/w')!;
+  assert.equal(n.title, 'Weekly');
+  assert.equal(findNode(t, n.id)!.parentId, reports);
+  assert.equal(findByUrl(t, 'https://nope.test/'), null);
+});
+
+test('renameNode trims; an empty title leaves it unchanged', () => {
+  const { t } = sample();
+  const id = findByUrl(t, 'https://mail.google.com/')!.id;
+  assert.equal(findNode(renameNode(t, id, '  Mail  '), id)!.node.title, 'Mail');
+  assert.deepEqual(renameNode(t, id, '   '), t);
+  assert.deepEqual(renameNode(t, 999, 'x'), t);
+});
+
+test('moveNode puts it first in the target; never into itself or a descendant', () => {
+  const { t, daily, reports } = sample();
+  const fig = findByUrl(t, 'https://figma.com/')!.id;
+  const m = moveNode(t, fig, daily);
+  assert.equal(findNode(m, fig)!.parentId, daily);
+  assert.equal((findNode(m, daily)!.node as { children: { id: number }[] }).children[0]!.id, fig);
+  assert.deepEqual(moveNode(t, daily, reports), t);
+  assert.deepEqual(moveNode(t, daily, daily), t);
+  assert.equal(findNode(moveNode(m, fig, TOP_LEVEL), fig)!.parentId, TOP_LEVEL);
+  assert.equal(moveNode(m, fig, TOP_LEVEL).nodes[0]!.id, fig);
+});
+
+test('removeNode removes a folder with its contents', () => {
+  const { t, daily } = sample();
+  const r = removeNode(t, daily);
+  assert.equal(findByUrl(r, 'https://mail.google.com/'), null);
+  assert.equal(findByUrl(r, 'https://r.test/w'), null);
+  assert.ok(findByUrl(r, 'https://figma.com/'));
+  assert.deepEqual(removeNode(t, 999), t);
+});
+
+test('folderChoices lists Top Level then folder paths, minus the moving folder subtree', () => {
+  const { t, daily, reports } = sample();
+  assert.deepEqual(folderChoices(t, null), [{ id: 0, path: 'Top Level' }, { id: daily, path: 'Daily' }, { id: reports, path: 'Daily / Reports' }]);
+  assert.deepEqual(folderChoices(t, daily), [{ id: 0, path: 'Top Level' }]);
+});
+
+test('flattenBookmarks gives every bookmark with its folder path', () => {
+  const { t } = sample();
+  const flat = flattenBookmarks(t.nodes);
+  assert.equal(flat.length, 3);
+  assert.equal(flat.find((b) => b.title === 'Weekly')!.path, 'Daily / Reports');
+  assert.equal(flat.find((b) => b.title === 'Gmail')!.path, 'Daily');
+  assert.equal(flat.find((b) => b.title === 'Figma')!.path, '');
+});
+
+test('decodeTree keeps valid nodes, drops bad ones, repairs ids', () => {
+  assert.deepEqual(decodeTree('garbage'), emptyTree());
+  const t = decodeTree({ version: 1, nextId: 2, nodes: [
+    { id: 1, kind: 'url', title: 'A', url: 'https://a.test/', added: 1 },
+    { id: 1, kind: 'url', title: 'Dup id', url: 'https://b.test/', added: 1 },
+    { id: 9, kind: 'url', title: 'Bad', url: 'javascript:x', added: 1 },
+    { id: 4, kind: 'folder', title: 'F', added: 1 }, // no children -> []
+  ] });
+  assert.equal(t.nodes.length, 3);
+  assert.equal(new Set(flattenBookmarks(t.nodes).map((b) => b.id)).size, 2);
+  assert.ok(t.nextId > Math.max(...t.nodes.map((n) => n.id)));
+  const f = t.nodes.find((n) => n.kind === 'folder')!;
+  assert.deepEqual((f as { children: unknown[] }).children, []);
+});
+
+test('decodeTree makes titles strings and ids unique across nested folders', () => {
+  const t = decodeTree({ nodes: [
+    { id: 1, kind: 'folder', title: 5, added: 1, children: [{ id: 1, kind: 'url', title: 'N', url: 'https://n.test/', added: 1 }] },
+  ] });
+  assert.equal(t.nodes[0]!.title, '');
+  const kid = flattenBookmarks(t.nodes)[0]!;
+  assert.notEqual(kid.id, t.nodes[0]!.id);
+  assert.ok(t.nextId > kid.id);
+});
