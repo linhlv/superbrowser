@@ -188,10 +188,20 @@ export function mergeChrome(tree: BookmarkTree, files: ChromeBookmarks[], now: n
       }
     }
   };
+  // A wrapper folder is created only when something is actually added inside it.
+  const importWrapper = (title: string, items: ChromeNode[]) => {
+    if (!items.length) return;
+    const existing = work.nodes.find((n): n is Folder => n.kind === 'folder' && n.title === title);
+    if (existing) { importInto(existing.children, items); return; }
+    const before = added;
+    const children: BookmarkNode[] = [];
+    importInto(children, items);
+    if (added > before) work.nodes.push({ id: work.nextId++, kind: 'folder', title, added: now, children });
+  };
   for (const f of files) {
     importInto(work.nodes, f.bar);
-    if (f.other.length) importInto(folderIn(work.nodes, 'Other Bookmarks', now).children, f.other);
-    if (f.mobile.length) importInto(folderIn(work.nodes, 'Mobile Bookmarks', now).children, f.mobile);
+    importWrapper('Other Bookmarks', f.other);
+    importWrapper('Mobile Bookmarks', f.mobile);
   }
   return { tree: work, added, skipped };
 }

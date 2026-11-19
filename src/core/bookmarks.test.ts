@@ -194,3 +194,19 @@ test('mergeChrome skips and counts non-web URLs', () => {
   assert.equal(r.skipped, 3);
   assert.deepEqual(titles(r.tree.nodes), ['OK', 'F']);
 });
+
+test('mergeChrome creates a wrapper folder only when it adds something inside it', () => {
+  const file = chrome({ other: [cu('O', 'https://o.test/')], mobile: [cu('M', 'https://m.test/')] });
+  const once = mergeChrome(emptyTree(), [file], T0);
+  // the user moves the bookmarks out and deletes both wrapper folders
+  let t = once.tree;
+  for (const url of ['https://o.test/', 'https://m.test/']) t = moveNode(t, findByUrl(t, url)!.id, TOP_LEVEL);
+  for (const n of t.nodes.filter((x) => x.kind === 'folder')) t = removeNode(t, n.id);
+  const again = mergeChrome(t, [file], T0);
+  assert.equal(again.added, 0);
+  assert.equal(again.skipped, 2);
+  assert.deepEqual(again.tree, t);
+  // all-duplicate content on a fresh tree leaves no empty wrapper either
+  const dup = mergeChrome(addBookmark(emptyTree(), { title: 'O', url: 'https://o.test/' }, T0).tree, [chrome({ other: [cu('O', 'https://o.test/')] })], T0);
+  assert.deepEqual(titles(dup.tree.nodes), ['O']);
+});
