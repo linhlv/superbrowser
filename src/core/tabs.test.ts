@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   emptyTabs, openTab, closeTab, reopenClosed, activateTab, updateTab, tabIdForShortcut, toSaved, fromSaved,
-  popupWindowOptions, windowOpenTarget, PAGE_WEB_PREFERENCES,
+  popupWindowOptions, windowOpenTarget, isOpenableLink, PAGE_WEB_PREFERENCES,
   type ProfileTabs, type TabRecord,
 } from './tabs.ts';
 
@@ -197,4 +197,27 @@ test('windowOpenTarget: only web pages open', () => {
     assert.deepEqual(open('new-window', 'width=10', url), { kind: 'deny' }, url);
   }
   assert.deepEqual(open('foreground-tab', '', 'http://localhost:3000/'), { kind: 'tab', activate: true });
+});
+
+test('windowOpenTarget: a blob: URL from the page opens as a popup (loaded by the page, so a revoked URL still works)', () => {
+  const blob = 'blob:https://billing.example.com/0f1e2d3c-aaaa-bbbb-cccc-123456789abc';
+  assert.deepEqual(open('foreground-tab', '', blob), { kind: 'popup' });
+  assert.deepEqual(open('background-tab', '', blob), { kind: 'popup' });
+  assert.deepEqual(open('new-window', 'width=500', blob), { kind: 'popup' });
+  assert.deepEqual(open('foreground-tab', '', 'BLOB:https://a.test/x'), { kind: 'popup' });
+});
+
+test('windowOpenTarget: dangerous schemes stay denied', () => {
+  for (const url of ['javascript:alert(1)', 'JavaScript:void 0', 'file:///Users/me/.ssh/id_rsa', 'chrome://settings', 'chrome-extension://abc/x.html', 'devtools://devtools/x', 'view-source:https://a.test/', 'filesystem:https://a.test/temporary/x', 'data:text/html,<script>1</script>']) {
+    for (const disposition of ['foreground-tab', 'background-tab', 'new-window'] as const) {
+      assert.deepEqual(open(disposition, 'width=10', url), { kind: 'deny' }, `${disposition} ${url}`);
+    }
+  }
+});
+
+test('isOpenableLink: web pages and blob: only', () => {
+  for (const url of ['https://a.test/', 'http://localhost:3000/x', 'blob:https://a.test/0f1e2d3c']) assert.equal(isOpenableLink(url), true, url);
+  for (const url of ['', 'javascript:alert(1)', 'file:///etc/passwd', 'chrome://settings', 'data:text/html,x', 'about:blank', 'mailto:a@b.c']) {
+    assert.equal(isOpenableLink(url), false, url);
+  }
 });

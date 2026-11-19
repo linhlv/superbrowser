@@ -79,12 +79,19 @@ export type OpenTarget = { kind: 'tab'; activate: boolean } | { kind: 'popup' } 
 
 /**
  * Where a page's `window.open` / target=_blank / ⌘-click goes. Links become tabs next to their opener
- * (⌘-click: in the background). `window.open` with features, and a blank window its opener will fill in,
- * become popups so `window.opener` survives. Only http(s) pages and about:blank may open.
+ * (⌘-click: in the background). `window.open` with features, a blank window its opener will fill in, and a
+ * blob: URL (the page's own data, e.g. a PDF invoice; it must load from the page, since the page may revoke it
+ * right after) become popups. Popups keep `window.opener`. Only http(s), blob: and about:blank may open.
  */
 export function windowOpenTarget(d: { url: string; disposition: OpenDisposition; features: string }): OpenTarget {
   const blank = d.url === '' || d.url === 'about:blank';
-  if (!blank && !/^https?:\/\//i.test(d.url)) return { kind: 'deny' };
-  if (blank || (d.disposition === 'new-window' && d.features.trim() !== '')) return { kind: 'popup' };
+  const blob = /^blob:/i.test(d.url);
+  if (!blank && !blob && !/^https?:\/\//i.test(d.url)) return { kind: 'deny' };
+  if (blank || blob || (d.disposition === 'new-window' && d.features.trim() !== '')) return { kind: 'popup' };
   return { kind: 'tab', activate: d.disposition !== 'background-tab' };
+}
+
+/** A link the context menu may open in a new tab: a web page, or the page's own blob: data (same partition). */
+export function isOpenableLink(url: string): boolean {
+  return /^(?:https?:\/\/|blob:)/i.test(url);
 }

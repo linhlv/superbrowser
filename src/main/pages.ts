@@ -1,7 +1,7 @@
 import { clipboard, Menu, type BaseWindow, type BrowserWindow, type ContextMenuParams, type MenuItemConstructorOptions, type WebContents } from 'electron';
 import { toNavigableUrl } from '../core/address.ts';
 import { contextMenuSpec, type MenuItemSpec } from '../core/contextMenu.ts';
-import { popupWindowOptions, windowOpenTarget } from '../core/tabs.ts';
+import { isOpenableLink, popupWindowOptions, windowOpenTarget } from '../core/tabs.ts';
 
 /** What a page (a tab's or a popup's) needs from the app. */
 export type PageHost = {
@@ -48,7 +48,8 @@ function menuItem(item: MenuItemSpec, wc: WebContents, p: ContextMenuParams, dir
   const click = (): void => {
     switch (item.id) {
       case 'openLinkInNewTab':
-        if (/^https?:\/\//i.test(p.linkURL)) host.openTab(dir, p.linkURL, { afterId: tabId, activate: false });
+        // A blob: link loads in the new tab from this profile's session (the page must not have revoked it).
+        if (isOpenableLink(p.linkURL)) host.openTab(dir, p.linkURL, { afterId: tabId, activate: false });
         break;
       case 'copyLink': clipboard.writeText(p.linkURL); break;
       case 'copyImage': wc.copyImageAt(p.x, p.y); break;
