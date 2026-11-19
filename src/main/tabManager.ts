@@ -172,6 +172,31 @@ export class TabManager {
     this.changed();
   }
 
+  /** The profile's tabs in sidebar order (`[]` if it is unknown), for picking a pin's tab. */
+  tabsOf(dir: string): { id: number; url: string }[] {
+    return (this.profiles.get(dir)?.tabs ?? []).map((t) => ({ id: t.id, url: t.url }));
+  }
+
+  /**
+   * Shows `dir` with its tab `id` active in one switch (a pin click from another profile). A tab not loaded yet
+   * gets its view now; a loaded one is only made visible, never reloaded.
+   */
+  showTab(dir: string, id: number): void {
+    const tabs = this.profiles.get(dir);
+    if (!tabs || !this.dirs.includes(dir) || !tabs.tabs.some((t) => t.id === id)) return;
+    this.activeDir = dir;
+    this.profiles.set(dir, activateTab(tabs, id));
+    this.refreshVisibility();
+    this.changed();
+  }
+
+  /** Shows `dir` with a new active tab at `url` in one switch (a pin with no tab on its site). */
+  showNewTab(dir: string, url: string): void {
+    if (!this.profiles.has(dir) || !this.dirs.includes(dir)) return;
+    this.activeDir = dir;
+    this.newTab(url, { dir });
+  }
+
   selectTabByShortcut(n: number): void {
     const tabs = this.activeDir === null ? undefined : this.profiles.get(this.activeDir);
     const id = tabs ? tabIdForShortcut(tabs, n) : null;

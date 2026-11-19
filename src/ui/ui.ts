@@ -2,6 +2,7 @@ import type { SuperbrowserApi } from '../preload/ui.ts';
 import { setupSuggestions } from './parts/suggestions.ts';
 import { setupBookmarksSection } from './parts/bookmarksSection.ts';
 import { setupHistorySection } from './parts/historySection.ts';
+import { setupPinBar } from './parts/pinBar.ts';
 import { setupProfileBar } from './parts/profileBar.ts';
 import { el, faviconIcon, isImageUrl } from './parts/dom.ts';
 import type { DownloadState, Section, UiState, UiTab } from '../shared/types.ts';
@@ -75,6 +76,8 @@ sb.onStartRename((id) => bookmarks.startRename(id));
 // Profile pills: switch on click, reorder by drag, menu on right-click, display name edited in place.
 const profileBar = setupProfileBar({ bar: byId('profiles'), sb });
 sb.onEditProfileName((dir) => profileBar.startEdit(dir));
+// Pinned tabs at the bar's right: a click goes to the pin's profile and tab, right-click opens its menu.
+const pinBar = setupPinBar({ bar: byId('pins'), sb });
 
 backBtn.addEventListener('click', () => sb.send({ type: 'back' }));
 forwardBtn.addEventListener('click', () => sb.send({ type: 'forward' }));
@@ -102,6 +105,7 @@ function createTabRow(id: number): HTMLElement {
   row.append(el('span', 'icon ph'), el('span', 't'), close);
   row.addEventListener('click', () => sb.send({ type: 'selectTab', id }));
   close.addEventListener('click', (e) => { e.stopPropagation(); sb.send({ type: 'closeTab', id }); });
+  row.addEventListener('contextmenu', (e) => { e.preventDefault(); sb.send({ type: 'tabMenu', id }); }); // Pin to Bar, Close Tab
   tabRows.set(id, row);
   return row;
 }
@@ -206,6 +210,7 @@ sb.onState((s) => {
   reloadBtn.disabled = s.activeTabId === null;
   renderTabs(s);
   profileBar.render(s);
+  pinBar.render(s);
   renderDownloads(s.downloads);
   if (!sectionsSettled) {
     sectionsSettled = true;

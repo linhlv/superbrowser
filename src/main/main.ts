@@ -6,6 +6,9 @@ import {
 } from '../core/bookmarks.ts';
 import type { HistoryEntry } from '../core/history.ts';
 import { chromeMajor, userAgent } from '../core/identity.ts';
+import {
+  addPin, keyOf, movePin, pinKey, pinLabel, pinTarget, rememberShown, removePin, withFavicon, type Pin,
+} from '../core/pins.ts';
 import { mergeProfiles, profileLabel, setDisplayName, withDisplayNames } from '../core/profiles.ts';
 import { createStore } from '../core/store.ts';
 import { sameSavedTabs } from '../core/tabs.ts';
@@ -15,7 +18,7 @@ import { sectionToggle, withSection } from '../core/sections.ts';
 import { splitWords } from '../core/searchText.ts';
 import { trailingThrottle } from '../core/throttle.ts';
 import { inlineCompletion, rankSuggestions } from '../core/suggest.ts';
-import { barProfiles, parseUiCommand } from '../core/uiProtocol.ts';
+import { barPins, barProfiles, parseUiCommand } from '../core/uiProtocol.ts';
 import {
   IPC, type BookmarkNode, type DownloadState, type LibraryReply, type Section, type UiCommand, type UiState,
 } from '../shared/types.ts';
@@ -24,7 +27,7 @@ import { newProfileInChrome, openProfileInChrome, readChromeProfiles } from './c
 import { ImportFlow } from './importFlow.ts';
 import { HistoryRecorder } from './historyRecorder.ts';
 import { Library } from './library.ts';
-import { buildAddProfileMenu, buildLibraryMenu, buildMenu, type MenuContext } from './menu.ts';
+import { buildAddProfileMenu, buildLibraryMenu, buildMenu, buildPinMenu, buildTabMenu, type MenuContext } from './menu.ts';
 import { isPopupWindow } from './pages.ts';
 import { ProfileManager } from './profileManager.ts';
 import { configureSessions, revealDownload } from './sessions.ts';
@@ -67,6 +70,8 @@ function start(): void {
   const recorder = new HistoryRecorder(library, log);
   let win: BrowserWindow | null = null;
   let downloads: DownloadState[] = [];
+  /** Each pin's remembered tab (by pin key): the tab last shown on the pin's host in its profile. This run only. */
+  let remembered = new Map<string, number>();
   /** Set once the UI exists; downloads only start from pages, after that. */
   let pushState = (): void => {};
 
@@ -127,7 +132,7 @@ function start(): void {
       const snap = tabs.snapshot();
       const uiState: UiState = {
         profiles: barProfiles(profiles.visible, state.displayNames),
-        pins: [],
+        pins: barPins(state.pins, profiles.visible, state.displayNames, snap),
         activeProfile: snap.dir,
         tabs: snap.tabs,
         activeTabId: snap.activeTabId,
@@ -158,6 +163,17 @@ function start(): void {
         state.activeProfile = activeProfile;
         store.save(state);
       }
+      // A pin follows its host: the shown tab on a pinned host becomes that pin's tab, and lends it its favicon.
+      noteShownTab();
+      const snap = tabs.snapshot();
+      const key = snap.dir ? pinKey(snap.dir, snap.url) : null;
+      const favicon = snap.tabs.find((t) => t.id === snap.activeTabId)?.favicon ?? null;
+      const pins = key === null ? state.pins : withFavicon(state.pins, key, favicon);
+      if (pins !== state.pins) {
+        state.pins = pins;
+        store.save(state);
+      }
+      syncPinTabItem();
       findBar.follow(tabs.activeWebContents()); // switching tab or profile closes the find bar
       pushState();
     }, log, profileName, recorder);
@@ -186,6 +202,99 @@ function start(): void {
       library,
       libraryChanged,
     });
+
+    // Pinned tabs: saved sites (profile + URL) in the bar. A pin's tab is only ever opened in the pin's own profile,
+    // through TabManager; pins of hidden profiles are left out of the bar, the menu and ⌥⌘N.
+    const noteShownTab = (): void => {
+      const snap = tabs.snapshot();
+      remembered = rememberShown(remembered, state.pins, { dir: snap.dir, tabId: snap.activeTabId, url: snap.url });
+    };
+    const isPinned = (pin: Pin): boolean => {
+      const key = pinKey(pin.dir, pin.url);
+      return key !== null && state.pins.some((p) => keyOf(p) === key);
+    };
+    /** What pinning the shown profile's tab `id` would save; null if the shown profile has no such tab. */
+    const pinOfTab = (id: number | null): Pin | null => {
+      const snap = tabs.snapshot();
+      const tab = snap.tabs.find((t) => t.id === id);
+      return tab && snap.dir ? { dir: snap.dir, url: tab.url, title: tab.title, favicon: tab.favicon } : null;
+    };
+    /** The Tab menu's "Pinned to Bar" checkbox for the main window's active tab. */
+    const activeTabPinState = (): { canPin: boolean; pinned: boolean } => {
+      const pin = pinOfTab(tabs.snapshot().activeTabId);
+      return { canPin: pin !== null && pinKey(pin.dir, pin.url) !== null, pinned: pin !== null && isPinned(pin) };
+    };
+    /** Electron flips the checkbox on click, and the active tab changes without a menu rebuild: set it from the pins. */
+    const syncPinTabItem = (): void => {
+      const item = Menu.getApplicationMenu()?.getMenuItemById('pinTab');
+      if (!item) return;
+      const { canPin, pinned } = activeTabPinState();
+      item.checked = pinned;
+      item.enabled = canPin;
+    };
+    /** Shown pins only (visible profiles), in bar order, numbered for ⌥⌘1…⌥⌘9. */
+    const shownPins = () => barPins(state.pins, profiles.visible, state.displayNames, tabs.snapshot());
+    const pinsChanged = (): void => {
+      store.save(state);
+      noteShownTab(); // a tab pinned while shown is that pin's tab from now on
+      rebuildMenu();
+      pushState();
+    };
+    /** Pins the tab's site in its profile, or unpins it if that site is pinned there already. */
+    const togglePin = (pin: Pin): void => {
+      const key = pinKey(pin.dir, pin.url);
+      if (key === null) return;
+      state.pins = isPinned(pin) ? removePin(state.pins, key) : addPin(state.pins, pin);
+      pinsChanged();
+    };
+    /** Shows the pin's profile and its tab: the remembered one, else the first on its host, else a new one. */
+    const openPin = (pin: Pin): void => {
+      if (!profiles.dirs.has(pin.dir)) return;
+      const t = pinTarget(pin, tabs.tabsOf(pin.dir), remembered.get(keyOf(pin)) ?? null);
+      if (t.kind === 'open') {
+        tabs.showNewTab(pin.dir, t.url);
+        return;
+      }
+      const snap = tabs.snapshot();
+      if (snap.dir !== pin.dir || snap.activeTabId !== t.id) tabs.showTab(pin.dir, t.id); // a selected pin does nothing
+    };
+    const shownPin = (key: string): Pin | null => state.pins.find((p) => keyOf(p) === key && profiles.dirs.has(p.dir)) ?? null;
+    const showPinMenu = (key: string): void => {
+      if (!shownPin(key)) {
+        log(`ignored a menu for pin ${key}: not shown`);
+        return;
+      }
+      const moved = (step: -1 | 1) => movePin(state.pins, key, step, profiles.dirs);
+      buildPinMenu({
+        canMoveLeft: moved(-1) !== null,
+        canMoveRight: moved(1) !== null,
+        unpin: () => {
+          state.pins = removePin(state.pins, key);
+          pinsChanged();
+        },
+        move: (step) => {
+          const next = moved(step);
+          if (next) {
+            state.pins = next;
+            pinsChanged();
+          }
+        },
+      }).popup({ window });
+    };
+    const showTabMenu = (id: number): void => {
+      const pin = pinOfTab(id);
+      if (!pin) {
+        log(`ignored a menu for tab ${id}: not in the shown profile`);
+        return;
+      }
+      buildTabMenu({
+        canPin: pinKey(pin.dir, pin.url) !== null,
+        pinned: isPinned(pin),
+        togglePin: () => togglePin(pin),
+        close: () => tabs.closeTab(id),
+      }).popup({ window });
+    };
+
     const relayout = () => layoutWindow(window, ui, findBar, tabs, state.sidebarVisible);
     relayout();
 
@@ -394,7 +503,7 @@ function start(): void {
       });
     };
 
-    const menuActions: Omit<MenuContext, 'profiles' | 'hiddenProfiles' | 'showNames'> = {
+    const menuActions: Omit<MenuContext, 'profiles' | 'hiddenProfiles' | 'showNames' | 'pins' | 'activeTabPinned' | 'canPinActiveTab'> = {
       newTab: () => {
         tabs.newTab();
         focusAddress();
@@ -453,13 +562,27 @@ function start(): void {
       },
       unhideProfile: (dir) => profiles.unhide(dir),
       selectTab: (n) => tabs.selectTabByShortcut(n),
+      selectPin: (n) => {
+        const shown = shownPins()[n - 1];
+        const pin = shown ? shownPin(shown.key) : null;
+        if (pin) openPin(pin);
+      },
+      togglePinActiveTab: () => {
+        const pin = pinOfTab(tabs.snapshot().activeTabId);
+        if (pin) togglePin(pin);
+        syncPinTabItem(); // also when nothing changed: undo Electron's flip
+      },
     };
     const rebuildMenu = (): void => {
+      const { canPin, pinned } = activeTabPinState();
       Menu.setApplicationMenu(buildMenu({
         ...menuActions,
         profiles: withDisplayNames(profiles.visible, state.displayNames),
         hiddenProfiles: withDisplayNames(profiles.hidden, state.displayNames),
         showNames: state.showNames,
+        pins: shownPins().map((p) => ({ label: pinLabel(p) })),
+        canPinActiveTab: canPin,
+        activeTabPinned: pinned,
       }));
     };
 
@@ -505,6 +628,14 @@ function start(): void {
           break;
         case 'historyMenu': showHistoryMenu(cmd.url); break;
         case 'bookmarkMenu': showBookmarkMenu(cmd.id); break;
+        case 'selectPin': {
+          const pin = shownPin(cmd.key);
+          if (pin) openPin(pin);
+          else log(`ignored selecting pin ${cmd.key}: not shown`);
+          break;
+        }
+        case 'pinMenu': showPinMenu(cmd.key); break;
+        case 'tabMenu': showTabMenu(cmd.id); break;
         case 'setDisplayName':
           state.displayNames = setDisplayName(state.displayNames, cmd.dir, cmd.name);
           store.save(state);

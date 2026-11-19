@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { addPin, decodePins, keyOf, movePin, pinKey, pinTarget, rememberShown, withFavicon } from './pins.ts';
+import { addPin, decodePins, keyOf, movePin, pinKey, pinLabel, pinTarget, rememberShown, withFavicon } from './pins.ts';
 import type { Pin } from './pins.ts';
 
 const pin = (dir: string, url: string, title = 't'): Pin => ({ dir, url, title, favicon: null });
@@ -63,4 +63,9 @@ test('withFavicon: same array when unchanged, null never clears', () => {
   assert.equal(withFavicon(ps, 'A|a.com', 'https://a.com/f.ico'), ps);
   assert.equal(withFavicon(ps, 'A|a.com', null), ps);
   assert.equal(withFavicon(ps, 'A|a.com', 'https://a.com/g.ico')[0]!.favicon, 'https://a.com/g.ico');
+});
+test('pinLabel: title, else host, then the profile label', () => {
+  assert.equal(pinLabel({ title: 'Inbox', url: 'https://mail.google.com/x', profileLabel: 'ACME' }), 'Inbox · ACME');
+  assert.equal(pinLabel({ title: '', url: 'https://mail.google.com:8443/x', profileLabel: 'Me' }), 'mail.google.com:8443 · Me');
+  assert.equal(pinLabel({ title: '', url: 'not a url', profileLabel: 'Me' }), 'not a url · Me');
 });

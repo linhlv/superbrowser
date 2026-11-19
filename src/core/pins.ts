@@ -15,6 +15,11 @@ export function pinKey(dir: string, url: string): string | null {
   return host === null ? null : `${dir}|${host}`;
 }
 
+/** A pin's name in its tooltip and the Pinned Tabs menu: `Inbox · ACME`, the host when it has no title. */
+export function pinLabel(pin: { title: string; url: string; profileLabel: string }): string {
+  return `${pin.title || pinHost(pin.url) || pin.url} · ${pin.profileLabel}`;
+}
+
 export function keyOf(pin: Pin): string {
   return pinKey(pin.dir, pin.url) ?? `${pin.dir}|`;
 }

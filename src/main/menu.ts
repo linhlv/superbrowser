@@ -44,6 +44,15 @@ export type MenuContext = {
   unhideProfile(dir: string): void;
   /** 1–8 select by position, 9 the last tab. */
   selectTab(n: number): void;
+  /** The shown pins (hidden profiles' left out), in bar order: `⌥⌘1…⌥⌘9` follow it. */
+  pins: { label: string }[];
+  /** The nth (1-based) shown pin: its profile shown, its tab selected or opened. */
+  selectPin(n: number): void;
+  /** Pins the main window's active tab to the bar, or unpins it if its site is pinned in its profile. */
+  togglePinActiveTab(): void;
+  /** The "Pinned to Bar" checkbox (`id: 'pinTab'`); main also updates it in place as tabs change. */
+  activeTabPinned: boolean;
+  canPinActiveTab: boolean; // false for a page that isn't http(s)
 };
 
 export function buildMenu(ctx: MenuContext): Menu {
@@ -63,6 +72,14 @@ export function buildMenu(ctx: MenuContext): Menu {
     accelerator: `CmdOrCtrl+${n}`,
     click: () => ctx.selectTab(n),
   }));
+  // ⌥⌘digit: ⌥digit alone types characters on macOS (™, £, brackets).
+  const pinItems: MenuItemConstructorOptions[] = ctx.pins.length > 0
+    ? ctx.pins.map((p, i) => ({
+      label: p.label,
+      ...(i < 9 ? { accelerator: `Alt+CmdOrCtrl+${i + 1}` } : {}),
+      click: () => ctx.selectPin(i + 1),
+    }))
+    : [{ label: 'No Pinned Tabs', enabled: false }];
 
   return Menu.buildFromTemplate([
     { role: 'appMenu' },
@@ -152,7 +169,17 @@ export function buildMenu(ctx: MenuContext): Menu {
     },
     {
       label: 'Tab',
-      submenu: [...tabItems, { label: 'Select Last Tab', accelerator: 'CmdOrCtrl+9', click: () => ctx.selectTab(9) }],
+      submenu: [
+        ...tabItems,
+        { label: 'Select Last Tab', accelerator: 'CmdOrCtrl+9', click: () => ctx.selectTab(9) },
+        sep,
+        // Electron flips `checked` on click; main then sets it (and `enabled`) from the pins, here and as tabs change.
+        {
+          id: 'pinTab', label: 'Pinned to Bar', type: 'checkbox', checked: ctx.activeTabPinned, enabled: ctx.canPinActiveTab,
+          click: () => ctx.togglePinActiveTab(),
+        },
+        { label: 'Pinned Tabs', submenu: pinItems },
+      ],
     },
     { role: 'windowMenu' },
   ]);
@@ -197,6 +224,41 @@ export function buildProfileMenu(ctx: ProfileMenuContext): Menu {
     { label: 'Hide Profile', enabled: ctx.canHide, click: () => ctx.hide() },
     { type: 'separator' },
     { label: 'Open in Chrome', click: () => ctx.openInChrome() },
+  ]);
+}
+
+/** The right-click menu of a tab row in the sidebar. */
+export type TabMenuContext = {
+  canPin: boolean; // false for a page that isn't http(s)
+  pinned: boolean; // a pin with this tab's profile and host exists
+  togglePin(): void;
+  close(): void;
+};
+
+export function buildTabMenu(ctx: TabMenuContext): Menu {
+  return Menu.buildFromTemplate([
+    ctx.pinned
+      ? { label: 'Unpin from Bar', click: () => ctx.togglePin() }
+      : { label: 'Pin to Bar', enabled: ctx.canPin, click: () => ctx.togglePin() },
+    { type: 'separator' },
+    { label: 'Close Tab', click: () => ctx.close() },
+  ]);
+}
+
+/** The right-click menu of a pin tile in the bottom bar. Moves skip pins of hidden profiles. */
+export type PinMenuContext = {
+  canMoveLeft: boolean;
+  canMoveRight: boolean;
+  unpin(): void;
+  move(step: -1 | 1): void;
+};
+
+export function buildPinMenu(ctx: PinMenuContext): Menu {
+  return Menu.buildFromTemplate([
+    { label: 'Unpin', click: () => ctx.unpin() },
+    { type: 'separator' },
+    { label: 'Move Left', enabled: ctx.canMoveLeft, click: () => ctx.move(-1) },
+    { label: 'Move Right', enabled: ctx.canMoveRight, click: () => ctx.move(1) },
   ]);
 }
 
