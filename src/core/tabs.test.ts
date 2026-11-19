@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   emptyTabs, openTab, closeTab, reopenClosed, activateTab, updateTab, tabIdForShortcut, toSaved, fromSaved,
-  popupWindowOptions, windowOpenTarget, isOpenableLink, PAGE_WEB_PREFERENCES,
+  popupWindowOptions, windowOpenTarget, isOpenableLink, PAGE_WEB_PREFERENCES, sameSavedTabs,
   type ProfileTabs, type TabRecord,
 } from './tabs.ts';
 
@@ -220,4 +220,23 @@ test('isOpenableLink: web pages and blob: only', () => {
   for (const url of ['', 'javascript:alert(1)', 'file:///etc/passwd', 'chrome://settings', 'data:text/html,x', 'about:blank', 'mailto:a@b.c']) {
     assert.equal(isOpenableLink(url), false, url);
   }
+});
+
+test('sameSavedTabs: equal only when every profile has the same urls, titles, order and active tab', () => {
+  const a = { P1: { tabs: [{ url: 'https://a.test/', title: 'A' }, { url: 'https://b.test/', title: 'B' }], activeIndex: 1 } };
+  const copy = () => structuredClone(a);
+  assert.equal(sameSavedTabs(a, copy()), true);
+  assert.equal(sameSavedTabs({}, {}), true);
+  const title = copy(); title.P1.tabs[0]!.title = 'A2';
+  const url = copy(); url.P1.tabs[1]!.url = 'https://c.test/';
+  const active = copy(); active.P1.activeIndex = 0;
+  const order = copy(); order.P1.tabs.reverse();
+  const fewer = copy(); fewer.P1.tabs.pop();
+  assert.equal(sameSavedTabs(a, title), false);
+  assert.equal(sameSavedTabs(a, url), false);
+  assert.equal(sameSavedTabs(a, active), false);
+  assert.equal(sameSavedTabs(a, order), false);
+  assert.equal(sameSavedTabs(a, fewer), false);
+  assert.equal(sameSavedTabs(a, { ...copy(), P2: { tabs: [], activeIndex: 0 } }), false);
+  assert.equal(sameSavedTabs({ ...copy(), P2: { tabs: [], activeIndex: 0 } }, a), false);
 });

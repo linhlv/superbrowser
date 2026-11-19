@@ -54,6 +54,17 @@ export function toSaved(s: ProfileTabs): SavedTabs {
   return { tabs: s.tabs.map(({ url, title }) => ({ url, title })), activeIndex: Math.max(i, 0) };
 }
 
+/** True when saving `b` would write the same tabs as `a`: per profile the same urls, titles, order and active tab. */
+export function sameSavedTabs(a: Record<string, SavedTabs>, b: Record<string, SavedTabs>): boolean {
+  const dirs = Object.keys(a);
+  if (dirs.length !== Object.keys(b).length) return false;
+  return dirs.every((dir) => {
+    const x = a[dir]!, y = b[dir];
+    return y !== undefined && x.activeIndex === y.activeIndex && x.tabs.length === y.tabs.length
+      && x.tabs.every((t, i) => t.url === y.tabs[i]!.url && t.title === y.tabs[i]!.title);
+  });
+}
+
 export function fromSaved(saved: SavedTabs, nextId: () => number): ProfileTabs {
   const tabs = saved.tabs.map(({ url, title }) => ({ id: nextId(), url, title }));
   const active = tabs[Math.min(Math.max(saved.activeIndex, 0), tabs.length - 1)];

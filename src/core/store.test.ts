@@ -61,3 +61,29 @@ test('corrupt file is set aside and defaults returned', (t) => {
   assert.equal(fs.existsSync(file), false);
   assert.ok(fs.readdirSync(dir).some((f) => f.startsWith('state.json.corrupt-')));
 });
+
+test('a steady stream of saves is still written every maxWait', async (t) => {
+  const dir = tmp();
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const file = path.join(dir, 'state.json');
+  const s = createStore(file, { debounceMs: 50, maxWaitMs: 150 });
+  const started = Date.now();
+  let n = 0;
+  while (Date.now() - started < 400) {
+    s.save({ ...defaultState(), activeProfile: `P${n++}` });
+    await new Promise((r) => setTimeout(r, 10)); // always within the debounce
+  }
+  assert.ok(fs.existsSync(file), 'written although the debounce never elapsed');
+  s.flush();
+  assert.equal(createStore(file).load().activeProfile, `P${n - 1}`);
+});
+
+test('an unreadable file (not just a missing one) is set aside and defaults returned', (t) => {
+  const dir = tmp();
+  t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+  const file = path.join(dir, 'state.json');
+  fs.mkdirSync(file); // reading it fails with EISDIR
+  assert.deepEqual(createStore(file).load(), defaultState());
+  assert.equal(fs.existsSync(file), false);
+  assert.ok(fs.readdirSync(dir).some((f) => f.startsWith('state.json.corrupt-')));
+});

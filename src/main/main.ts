@@ -3,6 +3,7 @@ import { app, BrowserWindow, Menu, Notification, type WebContentsView } from 'el
 import { chromeMajor, userAgent } from '../core/identity.ts';
 import { mergeProfiles } from '../core/profiles.ts';
 import { createStore } from '../core/store.ts';
+import { sameSavedTabs } from '../core/tabs.ts';
 import { barProfiles, parseUiCommand } from '../core/uiProtocol.ts';
 import { IPC, type DownloadState, type UiCommand, type UiState } from '../shared/types.ts';
 import { createBrowserWindow, createUiView, FindBar, layoutWindow } from './browserWindow.ts';
@@ -41,7 +42,13 @@ function start(): void {
     win.show();
     win.focus();
   });
-  app.on('before-quit', () => store.flush());
+  app.on('before-quit', () => {
+    try {
+      store.flush();
+    } catch (e) {
+      log(`could not save state: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  });
   app.on('window-all-closed', () => app.quit());
 
   void app.whenReady().then(() => {
@@ -93,10 +100,15 @@ function start(): void {
     };
 
     const tabs: TabManager = new TabManager(window, () => {
-      // Merge so tabs of profiles not loaded this run (hidden ones) are kept.
-      state.tabs = { ...state.tabs, ...tabs.savedState() };
-      state.activeProfile = tabs.snapshot().dir || state.activeProfile;
-      store.save(state);
+      // Merge so tabs of profiles not loaded this run (hidden ones) are kept. Saved only when something saved
+      // changed: loading and favicon events come often and must not keep postponing the write.
+      const saved = { ...state.tabs, ...tabs.savedState() };
+      const activeProfile = tabs.snapshot().dir || state.activeProfile;
+      if (activeProfile !== state.activeProfile || !sameSavedTabs(state.tabs, saved)) {
+        state.tabs = saved;
+        state.activeProfile = activeProfile;
+        store.save(state);
+      }
       findBar.follow(tabs.activeWebContents()); // switching tab or profile closes the find bar
       pushState();
     }, log);
