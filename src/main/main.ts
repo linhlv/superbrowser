@@ -42,7 +42,18 @@ function start(): void {
   app.on('window-all-closed', () => app.quit());
 
   void app.whenReady().then(() => {
-    configureSessions({ log });
+    configureSessions({
+      log,
+      mainWindow: () => win,
+      // `tabs` is created below; sessions (and so permission requests) only exist once it has made a tab.
+      shownProfile: () => tabs.snapshot().dir || null,
+      profileName: (dir) => state.knownProfiles.find((p) => p.dir === dir)?.name ?? dir,
+      getPermissions: () => state.permissions,
+      setPermissions: (p) => {
+        state.permissions = p;
+        store.save(state);
+      },
+    });
 
     state.knownProfiles = mergeProfiles(readChromeProfiles(), state.knownProfiles);
 

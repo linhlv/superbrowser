@@ -6,7 +6,7 @@ import {
   type ProfileTabs, type TabRecord,
 } from '../core/tabs.ts';
 import type { UiTab } from '../shared/types.ts';
-import { profileSession } from './sessions.ts';
+import { pageWebPreferences } from './sessions.ts';
 
 const NEW_TAB_URL = 'https://www.google.com';
 
@@ -213,7 +213,7 @@ export class TabManager {
 
   private createView(dir: string, tab: TabRecord): WebContentsView {
     const view = new WebContentsView({
-      webPreferences: { session: profileSession(dir), sandbox: true, contextIsolation: true },
+      webPreferences: pageWebPreferences(dir),
     });
     view.setBorderRadius(10);
     view.webContents.setAudioMuted(this.muted.has(dir));
