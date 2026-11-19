@@ -18,6 +18,7 @@ const NEW_TAB_URL = 'https://www.google.com';
 export class TabManager {
   private readonly win: BrowserWindow;
   private readonly onChange: () => void;
+  private readonly log: (msg: string) => void;
   private readonly profiles = new Map<string, ProfileTabs>();
   private readonly views = new Map<number, WebContentsView>();
   private readonly live = new Map<number, { favicon: string | null; loading: boolean }>();
@@ -27,9 +28,10 @@ export class TabManager {
   private bounds: Rect = { x: 0, y: 0, width: 0, height: 0 };
   private nextId = 1;
 
-  constructor(win: BrowserWindow, onChange: () => void) {
+  constructor(win: BrowserWindow, onChange: () => void, log: (msg: string) => void) {
     this.win = win;
     this.onChange = onChange;
+    this.log = log;
   }
 
   /** Profiles not seen before are restored from `saved` (lazily); known ones keep their tabs. */
@@ -243,10 +245,17 @@ export class TabManager {
     wc.on('page-favicon-updated', (_e, favicons) => { if (current()) setLive({ favicon: favicons[0] ?? null }); });
     wc.on('did-start-loading', () => { if (current()) setLive({ loading: true }); });
     wc.on('did-stop-loading', () => { if (current()) setLive({ loading: false }); });
+    // No in-page error UI yet (Electron has no Chrome net-error page; the tab stays blank): at least leave a trace.
+    wc.on('did-fail-load', (_e, code, description, url, isMainFrame) => {
+      if (isMainFrame && code !== ERR_ABORTED) this.log(`tab ${id} failed to load ${url}: ${description} (${code})`);
+    });
   }
 }
 
-/** Load failures (aborted redirects, offline…) show in the page itself; don't surface them as rejections. */
+/** ERR_ABORTED: a redirect or a newer navigation superseded this one — not a failure. */
+const ERR_ABORTED = -3;
+
+/** Failures are logged by the tab's `did-fail-load` listener (which also sees link clicks), so the rejection is only noise. */
 function load(wc: WebContents, url: string): void {
   wc.loadURL(url).catch(() => {});
 }

@@ -57,7 +57,7 @@ function start(): void {
       state.tabs = { ...state.tabs, ...tabs.savedState() };
       state.activeProfile = tabs.snapshot().dir || state.activeProfile;
       store.save(state);
-    });
+    }, log);
     tabs.setProfiles(profiles.map((p) => p.dir), state.tabs);
     layoutWindow(window, tabs, state.sidebarVisible);
 
