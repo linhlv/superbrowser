@@ -123,7 +123,8 @@ function start(): void {
       if (ui.webContents.isDestroyed()) return;
       const snap = tabs.snapshot();
       const uiState: UiState = {
-        profiles: barProfiles(profiles.visible),
+        profiles: barProfiles(profiles.visible, state.displayNames),
+        pins: [],
         activeProfile: snap.dir,
         tabs: snap.tabs,
         activeTabId: snap.activeTabId,

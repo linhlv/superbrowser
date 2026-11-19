@@ -1,6 +1,6 @@
 import type { Rect } from './appState.ts';
 
-export const SIDEBAR_W = 240, GAP = 8, BOTTOM_H = 40;
+export const SIDEBAR_W = 240, GAP = 8, BOTTOM_H = 44;
 
 /** Where the active tab's page goes, in window content coordinates. */
 export function tabBounds(size: { width: number; height: number }, sidebarVisible: boolean): Rect {

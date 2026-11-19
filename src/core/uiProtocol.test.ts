@@ -1,17 +1,34 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { barProfiles, parseUiCommand } from './uiProtocol.ts';
+import { barProfiles, barPins, parseUiCommand } from './uiProtocol.ts';
 
 const p = (dir: string) => ({ dir, name: `Name ${dir}`, color: '#123456' });
 
 test('barProfiles: shortcuts 1–9 in bar order, null after the ninth', () => {
-  const bar = barProfiles(Array.from({ length: 11 }, (_, i) => p(`P${i}`)));
+  const bar = barProfiles(Array.from({ length: 11 }, (_, i) => p(`P${i}`)), { P0: 'ACME' });
   assert.deepEqual(bar.map((x) => x.shortcut), [1, 2, 3, 4, 5, 6, 7, 8, 9, null, null]);
-  assert.deepEqual(bar[0], { dir: 'P0', name: 'Name P0', color: '#123456', shortcut: 1 });
+  assert.deepEqual(bar[0], { dir: 'P0', name: 'ACME', color: '#123456', shortcut: 1, initials: 'AC', chromeName: 'Name P0' });
 });
 
 test('barProfiles: empty list stays empty', () => {
-  assert.deepEqual(barProfiles([]), []);
+  assert.deepEqual(barProfiles([], {}), []);
+});
+
+const pin = (dir: string, host: string) => ({ dir, url: `https://${host}/`, title: host, favicon: null });
+
+test('barPins: hides pins of profiles not visible and numbers the rest', () => {
+  const out = barPins([pin('A', 'a.com'), pin('H', 'h.com'), pin('B', 'b.com')], [p('A'), p('B')], {}, { dir: 'A', url: 'about:blank' });
+  assert.deepEqual(out.map((x) => x.key), ['A|a.com', 'B|b.com']);
+  assert.deepEqual(out.map((x) => x.shortcut), [1, 2]);
+  const many = Array.from({ length: 10 }, (_, i) => pin('A', `h${i}.com`));
+  assert.equal(barPins(many, [p('A')], {}, { dir: 'A', url: '' })[9]!.shortcut, null);
+});
+
+test('barPins: active only for the shown profile on the same host', () => {
+  const pins = [pin('A', 'a.com'), pin('B', 'b.com')];
+  const vis = [p('A'), p('B')];
+  assert.deepEqual(barPins(pins, vis, {}, { dir: 'A', url: 'https://a.com/deep' }).map((x) => x.active), [true, false]);
+  assert.deepEqual(barPins(pins, vis, {}, { dir: 'B', url: 'https://a.com/' }).map((x) => x.active), [false, false]);
 });
 
 const known = new Set(['Default', 'Profile 3']);
@@ -43,6 +60,10 @@ test('parseUiCommand: accepts every well-formed command and keeps only its field
     { type: 'historyMenu', url: 'https://a.com/x' },
     { type: 'bookmarkMenu', id: 5 },
     { type: 'renameBookmark', id: 5, title: 'Sprint board' },
+    { type: 'selectPin', key: 'Default|a.com' },
+    { type: 'pinMenu', key: 'Default|a.com' },
+    { type: 'tabMenu', id: 3 },
+    { type: 'setDisplayName', dir: 'Default', name: 'ACME' },
     { type: 'setSectionOpen', section: 'history', open: true },
     { type: 'setSectionOpen', section: 'bookmarks', open: false },
   ];
@@ -116,5 +137,13 @@ test('parseUiCommand: rejects bad setSectionOpen', () => {
     { type: 'setSectionOpen', section: 'downloads', open: true },
     { type: 'setSectionOpen', section: 'history', open: 'yes' },
     { type: 'setSectionOpen', section: 'history' },
+  ]) assert.equal(parseUiCommand(c, known), null, JSON.stringify(c));
+});
+
+test('parseUiCommand: rejects bad pin and display-name commands', () => {
+  for (const c of [
+    { type: 'selectPin', key: '' }, { type: 'selectPin', key: 5 }, { type: 'selectPin' }, { type: 'pinMenu', key: 'x'.repeat(2049) },
+    { type: 'tabMenu', id: '3' },
+    { type: 'setDisplayName', dir: 'Profile 9', name: 'x' }, { type: 'setDisplayName', dir: 'Default', name: 'x'.repeat(201) },
   ]) assert.equal(parseUiCommand(c, known), null, JSON.stringify(c));
 });

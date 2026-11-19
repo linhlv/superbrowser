@@ -3,15 +3,15 @@ import assert from 'node:assert/strict';
 import { tabBounds, restoreBounds, findBarBounds, SIDEBAR_W, GAP, BOTTOM_H } from './layout.ts';
 
 test('layout constants', () => {
-  assert.deepEqual([SIDEBAR_W, GAP, BOTTOM_H], [240, 8, 40]);
+  assert.deepEqual([SIDEBAR_W, GAP, BOTTOM_H], [240, 8, 44]);
 });
 
 test('tabBounds with the sidebar visible', () => {
-  assert.deepEqual(tabBounds({ width: 1400, height: 900 }, true), { x: 240, y: 8, width: 1152, height: 852 });
+  assert.deepEqual(tabBounds({ width: 1400, height: 900 }, true), { x: 240, y: 8, width: 1152, height: 900 - 8 - 44 });
 });
 
 test('tabBounds with the sidebar hidden', () => {
-  assert.deepEqual(tabBounds({ width: 1400, height: 900 }, false), { x: 8, y: 8, width: 1384, height: 852 });
+  assert.deepEqual(tabBounds({ width: 1400, height: 900 }, false), { x: 8, y: 8, width: 1384, height: 900 - 8 - 44 });
 });
 
 const screens = [{ x: 0, y: 25, width: 1512, height: 920 }, { x: 1512, y: 0, width: 1920, height: 1055 }];

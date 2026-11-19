@@ -1,9 +1,15 @@
 export type Profile = { dir: string; name: string; color: string };
+export type UiProfile = Profile & { shortcut: number | null; initials: string; chromeName: string }; // name is the label (display name or Chrome name)
+export type UiPin = {
+  key: string; dir: string; title: string; url: string; favicon: string | null;
+  color: string; profileLabel: string; shortcut: number | null; active: boolean;
+};
 export type UiTab = { id: number; title: string; url: string; favicon: string | null; loading: boolean };
 
 export type DownloadState = { id: string; dir: string; filename: string; path: string; state: 'progressing' | 'completed' | 'cancelled' | 'interrupted'; received: number; total: number };
 export type UiState = {
-  profiles: (Profile & { shortcut: number | null })[]; // visible profiles in bar order; shortcut 1–9 or null
+  profiles: UiProfile[]; // visible profiles in bar order; shortcut 1–9 or null
+  pins: UiPin[];
   activeProfile: string;
   tabs: UiTab[]; activeTabId: number | null;
   url: string; canGoBack: boolean; canGoForward: boolean;
@@ -25,6 +31,8 @@ export type UiCommand =
   | { type: 'historyMenu'; url: string }
   | { type: 'bookmarkMenu'; id: number }
   | { type: 'renameBookmark'; id: number; title: string }
+  | { type: 'selectPin'; key: string } | { type: 'pinMenu'; key: string }
+  | { type: 'tabMenu'; id: number } | { type: 'setDisplayName'; dir: string; name: string }
   | { type: 'setSectionOpen'; section: Section; open: boolean };
 export type Suggestion = { url: string; title: string; bookmarked: boolean };
 export type HistoryRow = { url: string; title: string; time: number; day: number; favicon: string | null };
@@ -43,5 +51,5 @@ export const IPC = {
   state: 'ui:state', command: 'ui:command', focusAddress: 'ui:focus-address',
   findResult: 'ui:find-result', findFocus: 'ui:find-focus',
   library: 'ui:library', libraryChanged: 'ui:library-changed', panel: 'ui:panel', startRename: 'ui:start-rename',
-  historyRecorded: 'ui:history-recorded',
+  historyRecorded: 'ui:history-recorded', editProfileName: 'ui:edit-profile-name',
 } as const;
