@@ -6,6 +6,7 @@ import {
   type ProfileTabs, type TabRecord,
 } from '../core/tabs.ts';
 import type { UiTab } from '../shared/types.ts';
+import { ERR_ABORTED, wirePage, type PageHost } from './pages.ts';
 import { pageWebPreferences } from './sessions.ts';
 
 const NEW_TAB_URL = 'https://www.google.com';
@@ -28,12 +29,20 @@ export class TabManager {
   private activeDir: string | null = null;
   private shownId: number | null = null;
   private bounds: Rect = { x: 0, y: 0, width: 0, height: 0 };
+  /** The tab whose page is in HTML full screen (a video): its view fills the whole window. */
+  private fullScreenId: number | null = null;
   private nextId = 1;
+  /** Links and popups from a page open in the page's own profile (see `wirePage`). */
+  private readonly pageHost: PageHost;
 
   constructor(win: BrowserWindow, onChange: () => void, log: (msg: string) => void) {
     this.win = win;
     this.onChange = onChange;
     this.log = log;
+    this.pageHost = {
+      log,
+      openTab: (dir, url, opts) => void this.newTab(url, { dir, afterId: opts.afterId ?? undefined, activate: opts.activate }),
+    };
   }
 
   /** Profiles not seen before are restored from `saved` (lazily); known ones keep their tabs. */
@@ -181,15 +190,41 @@ export class TabManager {
     return out;
   }
 
-  /** Every view gets the same rect so a hidden tab is already sized when shown. */
+  /** Every view gets the same rect so a hidden tab is already sized when shown; a full-screen page gets the window. */
   layout(rect: Rect): void {
     this.bounds = rect;
-    for (const view of this.views.values()) view.setBounds(rect);
+    for (const [id, view] of this.views) view.setBounds(id === this.fullScreenId ? this.windowRect() : rect);
   }
 
   private activeTab(): TabRecord | undefined {
     const tabs = this.activeDir === null ? undefined : this.profiles.get(this.activeDir);
     return tabs?.tabs.find((t) => t.id === tabs.activeId);
+  }
+
+  private windowRect(): Rect {
+    const [width = 0, height = 0] = this.win.getContentSize();
+    return { x: 0, y: 0, width, height };
+  }
+
+  /**
+   * A page went HTML full screen: its view covers the sidebar and bar (the UI view stays below). The window
+   * itself is put in full screen by Electron, which also leaves it on exit only if the page had entered it.
+   */
+  private enterFullScreen(id: number): void {
+    const view = this.views.get(id);
+    if (!view) return;
+    this.fullScreenId = id;
+    view.setBorderRadius(0);
+    view.setBounds(this.windowRect());
+  }
+
+  private leaveFullScreen(id: number): void {
+    if (this.fullScreenId !== id) return;
+    this.fullScreenId = null;
+    const view = this.views.get(id);
+    if (!view) return;
+    view.setBorderRadius(10);
+    view.setBounds(this.bounds);
   }
 
   private dirOf(id: number): string | null {
@@ -203,6 +238,11 @@ export class TabManager {
     const target = tab?.id ?? null;
     if (target === this.shownId) return;
     if (this.shownId !== null) this.views.get(this.shownId)?.setVisible(false);
+    // Switching away (⌃N, ⌘N) from a full-screen video ends its full screen, so the new page isn't left behind it.
+    if (this.fullScreenId !== null && this.fullScreenId !== target) {
+      this.views.get(this.fullScreenId)?.webContents.executeJavaScript('document.fullscreenElement && document.exitFullscreen()').catch(() => {});
+      this.leaveFullScreen(this.fullScreenId);
+    }
     this.shownId = target;
     if (tab && this.activeDir !== null) {
       const view = this.views.get(tab.id) ?? this.createView(this.activeDir, tab);
@@ -222,7 +262,7 @@ export class TabManager {
     this.win.contentView.addChildView(view);
     this.views.set(tab.id, view);
     this.live.set(tab.id, { favicon: null, loading: false });
-    this.wire(view, tab.id);
+    this.wire(view, dir, tab.id);
     load(view.webContents, tab.url);
     return view;
   }
@@ -232,13 +272,15 @@ export class TabManager {
     this.views.delete(id);
     this.live.delete(id);
     if (this.shownId === id) this.shownId = null;
+    if (this.fullScreenId === id) this.fullScreenId = null;
     if (!view) return;
     this.win.contentView.removeChildView(view);
     view.webContents.close();
   }
 
-  private wire(view: WebContentsView, id: number): void {
+  private wire(view: WebContentsView, dir: string, id: number): void {
     const wc = view.webContents;
+    wirePage(wc, dir, id, () => (this.win.isDestroyed() ? null : this.win), this.pageHost);
     // A closed tab's id can come back (reopen) with a new view; ignore events from the old one.
     const current = () => this.views.get(id) === view;
     const patch = (p: Partial<Pick<TabRecord, 'url' | 'title'>>) => {
@@ -268,11 +310,10 @@ export class TabManager {
     wc.on('did-fail-load', (_e, code, description, url, isMainFrame) => {
       if (isMainFrame && code !== ERR_ABORTED) this.log(`tab ${id} failed to load ${url}: ${description} (${code})`);
     });
+    wc.on('enter-html-full-screen', () => { if (current()) this.enterFullScreen(id); });
+    wc.on('leave-html-full-screen', () => { if (current()) this.leaveFullScreen(id); });
   }
 }
-
-/** ERR_ABORTED: a redirect or a newer navigation superseded this one — not a failure. */
-const ERR_ABORTED = -3;
 
 /** Failures are logged by the tab's `did-fail-load` listener (which also sees link clicks), so the rejection is only noise. */
 function load(wc: WebContents, url: string): void {

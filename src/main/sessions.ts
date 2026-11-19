@@ -6,10 +6,11 @@ import {
   describeRequest, permissionKeys, policyFor, PromptQueue, siteOrigin, storeAnswer, verdictFor,
   type PermissionPrompt, type Verdict,
 } from '../core/permissions.ts';
+import { PAGE_WEB_PREFERENCES } from '../core/tabs.ts';
+import { Downloads, type DownloadsContext } from './downloads.ts';
 
-/** What profile sessions need from the app; later tasks add the download UI. */
-export type SessionContext = {
-  log: (msg: string) => void;
+/** What profile sessions need from the app. */
+export type SessionContext = DownloadsContext & {
   /** The window permission sheets attach to; null once it is gone (requests are then refused). */
   mainWindow(): BrowserWindow | null;
   /** The profile whose tabs are on screen, if any. */
@@ -21,6 +22,7 @@ export type SessionContext = {
 };
 
 let context: SessionContext | null = null;
+let downloads: Downloads | null = null;
 const sessions = new Map<string, Session>();
 /** Blocks, and Allows given with "Remember for this site" unchecked: they hold until the app quits. */
 let forThisRun: AppState['permissions'] = {};
@@ -31,6 +33,12 @@ const prompts = new PromptQueue(showPermissionSheet, currentVerdict, stillWanted
 /** Call once at startup, before the first `profileSession`. */
 export function configureSessions(ctx: SessionContext): void {
   context = ctx;
+  downloads = new Downloads(ctx);
+}
+
+/** The sidebar's Downloads list was clicked: shows that file in Finder (only files Superbrowser saved). */
+export function revealDownload(id: string): void {
+  downloads?.reveal(id);
 }
 
 /** The only way to get a profile's session: `persist:<chrome profile dir>`, set up on first use. */
@@ -46,6 +54,8 @@ export function profileSession(dir: string): Session {
     callback({ requestHeaders: rewriteClientHints(details.requestHeaders, major) });
   });
   installPermissionHandlers(s, dir);
+  // Popups and background profiles included: every download of this profile is saved and listed.
+  s.on('will-download', (_e, item) => downloads?.track(item, dir));
   // dist/main.cjs → dist/preload/frame.cjs: passkey requests fail fast in every frame (see pageWebPreferences).
   s.registerPreloadScript({ type: 'frame', id: 'superbrowser-passkey', filePath: path.join(__dirname, 'preload', 'frame.cjs') });
   sessions.set(dir, s);
@@ -54,11 +64,11 @@ export function profileSession(dir: string): Session {
 }
 
 /**
- * For every view or window showing a profile's pages. `nodeIntegrationInSubFrames` only makes the session's
- * frame preload (passkey fail-fast) run in iframes too; sandboxed, so pages still get no Node.
+ * For every view showing a profile's pages (popups get the same via `popupWindowOptions`). `nodeIntegrationInSubFrames`
+ * only makes the session's frame preload (passkey fail-fast) run in iframes too; sandboxed, so pages still get no Node.
  */
 export function pageWebPreferences(dir: string): WebPreferences {
-  return { session: profileSession(dir), sandbox: true, contextIsolation: true, nodeIntegrationInSubFrames: true };
+  return { session: profileSession(dir), ...PAGE_WEB_PREFERENCES };
 }
 
 /** Never granted silently: see `policyFor`. Asked permissions show one sheet at a time on the main window. */

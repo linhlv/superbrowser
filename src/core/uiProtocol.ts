@@ -27,7 +27,7 @@ export function parseUiCommand(raw: unknown, knownDirs: ReadonlySet<string>): Ui
     case 'navigate':
       return typeof raw['input'] === 'string' ? { type, input: raw['input'] } : null;
     case 'revealDownload':
-      return typeof id === 'string' ? { type, id } : null;
+      return typeof id === 'string' && id !== '' ? { type, id } : null;
     case 'find':
       return typeof raw['text'] === 'string' && typeof raw['forward'] === 'boolean'
         ? { type, text: raw['text'], forward: raw['forward'] } : null;

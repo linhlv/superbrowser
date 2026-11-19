@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   emptyTabs, openTab, closeTab, reopenClosed, activateTab, updateTab, tabIdForShortcut, toSaved, fromSaved,
+  popupWindowOptions, windowOpenTarget, PAGE_WEB_PREFERENCES,
   type ProfileTabs, type TabRecord,
 } from './tabs.ts';
 
@@ -149,4 +150,51 @@ test('fromSaved clamps an out-of-range activeIndex', () => {
   let next = 1;
   const s = fromSaved({ tabs: [{ url: 'a', title: '' }, { url: 'b', title: '' }], activeIndex: 7 }, () => next++);
   assert.equal(s.activeId, 2);
+});
+
+test('popupWindowOptions: a popup opens in the opener profile session (Review Focus #1)', () => {
+  const o = popupWindowOptions('Profile 36');
+  assert.equal(o.webPreferences.partition, 'persist:Profile 36');
+  assert.equal(o.webPreferences.nodeIntegrationInSubFrames, true);
+  assert.deepEqual(o, {
+    width: 520,
+    height: 680,
+    webPreferences: { partition: 'persist:Profile 36', sandbox: true, contextIsolation: true, nodeIntegrationInSubFrames: true },
+  });
+  assert.equal(popupWindowOptions('Default').webPreferences.partition, 'persist:Default');
+});
+
+test('popupWindowOptions: same page preferences as tab views', () => {
+  const { partition, ...rest } = popupWindowOptions('Profile 1').webPreferences;
+  assert.equal(partition, 'persist:Profile 1');
+  assert.deepEqual(rest, PAGE_WEB_PREFERENCES);
+});
+
+const open = (disposition: Parameters<typeof windowOpenTarget>[0]['disposition'], features = '', url = 'https://example.com/x') =>
+  windowOpenTarget({ url, disposition, features });
+
+test('windowOpenTarget: links become tabs (⌘-click in the background)', () => {
+  assert.deepEqual(open('foreground-tab'), { kind: 'tab', activate: true });
+  assert.deepEqual(open('background-tab'), { kind: 'tab', activate: false });
+  assert.deepEqual(open('new-window'), { kind: 'tab', activate: true }); // ⇧-click: no features
+  assert.deepEqual(open('default'), { kind: 'tab', activate: true });
+  assert.deepEqual(open('other'), { kind: 'tab', activate: true });
+});
+
+test('windowOpenTarget: window.open with features is a popup (keeps window.opener, e.g. OAuth)', () => {
+  assert.deepEqual(open('new-window', 'width=500,height=600'), { kind: 'popup' });
+  assert.deepEqual(open('new-window', 'popup'), { kind: 'popup' });
+});
+
+test('windowOpenTarget: a blank window is a popup (its opener fills it in)', () => {
+  assert.deepEqual(open('foreground-tab', '', 'about:blank'), { kind: 'popup' });
+  assert.deepEqual(open('foreground-tab', '', ''), { kind: 'popup' });
+});
+
+test('windowOpenTarget: only web pages open', () => {
+  for (const url of ['file:///etc/passwd', 'chrome://settings', 'javascript:alert(1)', 'data:text/html,hi', 'mailto:a@b.c', 'not a url']) {
+    assert.deepEqual(open('foreground-tab', '', url), { kind: 'deny' }, url);
+    assert.deepEqual(open('new-window', 'width=10', url), { kind: 'deny' }, url);
+  }
+  assert.deepEqual(open('foreground-tab', '', 'http://localhost:3000/'), { kind: 'tab', activate: true });
 });

@@ -70,3 +70,8 @@ test('parseUiCommand: find needs a string text and a boolean direction', () => {
   assert.equal(parseUiCommand({ type: 'find', text: 'x' }, known), null);
   assert.equal(parseUiCommand({ type: 'find', text: 'x', forward: 'yes' }, known), null);
 });
+
+test('parseUiCommand: revealDownload needs a non-empty id', () => {
+  assert.equal(parseUiCommand({ type: 'revealDownload', id: '' }, known), null);
+  assert.equal(parseUiCommand({ type: 'revealDownload' }, known), null);
+});

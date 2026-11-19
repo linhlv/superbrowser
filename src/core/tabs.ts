@@ -59,3 +59,32 @@ export function fromSaved(saved: SavedTabs, nextId: () => number): ProfileTabs {
   const active = tabs[Math.min(Math.max(saved.activeIndex, 0), tabs.length - 1)];
   return { tabs, activeId: active?.id ?? null, closed: [] };
 }
+
+/** What every view or window showing a profile's pages gets besides its session (see `pageWebPreferences`). */
+export const PAGE_WEB_PREFERENCES = { sandbox: true, contextIsolation: true, nodeIntegrationInSubFrames: true } as const;
+
+/**
+ * A popup (`window.open` with features, e.g. "Sign in with Google") is a small window in the opener's
+ * profile: same partition (so same cookies, UA and frame preloads), same page preferences as a tab.
+ */
+export function popupWindowOptions(dir: string): {
+  width: number; height: number;
+  webPreferences: { partition: string } & typeof PAGE_WEB_PREFERENCES;
+} {
+  return { width: 520, height: 680, webPreferences: { partition: 'persist:' + dir, ...PAGE_WEB_PREFERENCES } };
+}
+
+export type OpenDisposition = 'default' | 'foreground-tab' | 'background-tab' | 'new-window' | 'other';
+export type OpenTarget = { kind: 'tab'; activate: boolean } | { kind: 'popup' } | { kind: 'deny' };
+
+/**
+ * Where a page's `window.open` / target=_blank / ⌘-click goes. Links become tabs next to their opener
+ * (⌘-click: in the background). `window.open` with features, and a blank window its opener will fill in,
+ * become popups so `window.opener` survives. Only http(s) pages and about:blank may open.
+ */
+export function windowOpenTarget(d: { url: string; disposition: OpenDisposition; features: string }): OpenTarget {
+  const blank = d.url === '' || d.url === 'about:blank';
+  if (!blank && !/^https?:\/\//i.test(d.url)) return { kind: 'deny' };
+  if (blank || (d.disposition === 'new-window' && d.features.trim() !== '')) return { kind: 'popup' };
+  return { kind: 'tab', activate: d.disposition !== 'background-tab' };
+}

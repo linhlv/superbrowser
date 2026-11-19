@@ -1,16 +1,16 @@
 import path from 'node:path';
-import { app, BrowserWindow, Menu, type WebContentsView } from 'electron';
+import { app, BrowserWindow, Menu, Notification, type WebContentsView } from 'electron';
 import { chromeMajor, userAgent } from '../core/identity.ts';
 import { mergeProfiles } from '../core/profiles.ts';
 import { createStore } from '../core/store.ts';
 import { barProfiles, parseUiCommand } from '../core/uiProtocol.ts';
-import { IPC, type UiCommand, type UiState } from '../shared/types.ts';
+import { IPC, type DownloadState, type UiCommand, type UiState } from '../shared/types.ts';
 import { createBrowserWindow, createUiView, FindBar, layoutWindow } from './browserWindow.ts';
 import { openProfileInChrome, readChromeProfiles } from './chrome.ts';
 import { ImportFlow } from './importFlow.ts';
 import { buildMenu, type MenuContext } from './menu.ts';
 import { ProfileManager } from './profileManager.ts';
-import { configureSessions } from './sessions.ts';
+import { configureSessions, revealDownload } from './sessions.ts';
 import { TabManager } from './tabManager.ts';
 
 app.userAgentFallback = userAgent(chromeMajor(process.versions.chrome));
@@ -31,6 +31,9 @@ function start(): void {
   const store = createStore(path.join(app.getPath('userData'), 'state.json'));
   const state = store.load();
   let win: BrowserWindow | null = null;
+  let downloads: DownloadState[] = [];
+  /** Set once the UI exists; downloads only start from pages, after that. */
+  let pushState = (): void => {};
 
   app.on('second-instance', () => {
     if (!win) return;
@@ -53,6 +56,14 @@ function start(): void {
         state.permissions = p;
         store.save(state);
       },
+      downloadsDir: () => app.getPath('downloads'),
+      onDownloadsChanged: (list) => {
+        downloads = list;
+        pushState();
+      },
+      notify: (title, body) => {
+        if (Notification.isSupported()) new Notification({ title, body }).show();
+      },
     });
 
     state.knownProfiles = mergeProfiles(readChromeProfiles(), state.knownProfiles);
@@ -63,7 +74,7 @@ function start(): void {
     const findBar = new FindBar(window, log);
     window.setWindowButtonVisibility(state.sidebarVisible);
 
-    const pushState = (): void => {
+    pushState = (): void => {
       if (ui.webContents.isDestroyed()) return;
       const snap = tabs.snapshot();
       const uiState: UiState = {
@@ -76,7 +87,7 @@ function start(): void {
         canGoForward: snap.canGoForward,
         sidebarVisible: state.sidebarVisible,
         showNames: state.showNames,
-        downloads: [],
+        downloads,
       };
       ui.webContents.send(IPC.state, uiState);
     };
@@ -213,7 +224,7 @@ function start(): void {
         case 'forward': tabs.forward(); break;
         case 'reload': tabs.reload(); break;
         case 'toggleSidebar': setSidebarVisible(!state.sidebarVisible); break;
-        case 'revealDownload': break; // Task 9 adds downloads
+        case 'revealDownload': revealDownload(cmd.id); break;
         case 'find': findBar.find(cmd.text, cmd.forward); break;
         case 'findClose': findBar.close(true); break;
       }

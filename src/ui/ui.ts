@@ -1,5 +1,5 @@
 import type { SuperbrowserApi } from '../preload/ui.ts';
-import type { UiState, UiTab } from '../shared/types.ts';
+import type { DownloadState, UiState, UiTab } from '../shared/types.ts';
 
 declare global {
   interface Window { superbrowser: SuperbrowserApi }
@@ -139,6 +139,50 @@ function renderProfiles(s: UiState): void {
   }
 }
 
+// Download rows are kept by id too; newest first. A click shows the file in Finder.
+const downloadsSection = byId('downloads');
+const downloadList = byId('dllist');
+const downloadRows = new Map<string, HTMLElement>();
+
+function createDownloadRow(id: string): HTMLElement {
+  const row = el('div', 'dl');
+  row.append(el('div', 'f'), el('progress', ''), el('div', 's'));
+  row.addEventListener('click', () => sb.send({ type: 'revealDownload', id }));
+  downloadRows.set(id, row);
+  return row;
+}
+
+const downloadStatus = (d: DownloadState): string =>
+  d.state === 'cancelled' ? 'Cancelled' : d.state === 'interrupted' ? 'Failed' : '';
+
+function updateDownloadRow(row: HTMLElement, d: DownloadState): void {
+  const name = row.querySelector('.f')!;
+  if (name.textContent !== d.filename) name.textContent = d.filename;
+  row.title = d.state === 'completed' ? 'Show in Finder' : d.filename;
+  const bar = row.querySelector('progress')!;
+  bar.hidden = d.state !== 'progressing';
+  if (d.total > 0) { bar.max = d.total; bar.value = d.received; } else bar.removeAttribute('value'); // size unknown: indeterminate
+  row.querySelector('.s')!.textContent = downloadStatus(d);
+}
+
+function renderDownloads(list: DownloadState[]): void {
+  downloadsSection.hidden = list.length === 0;
+  const newestFirst = [...list].reverse();
+  const seen = new Set<string>();
+  let prev: Element | null = null;
+  for (const d of newestFirst) {
+    const row = downloadRows.get(d.id) ?? createDownloadRow(d.id);
+    updateDownloadRow(row, d);
+    const expected: Element | null = prev ? prev.nextElementSibling : downloadList.firstElementChild;
+    if (expected !== row) downloadList.insertBefore(row, expected);
+    prev = row;
+    seen.add(d.id);
+  }
+  for (const [id, row] of downloadRows) {
+    if (!seen.has(id)) { row.remove(); downloadRows.delete(id); }
+  }
+}
+
 sb.onState((s) => {
   const first = current === null;
   current = s;
@@ -153,5 +197,6 @@ sb.onState((s) => {
   reloadBtn.disabled = s.activeTabId === null;
   renderTabs(s);
   renderProfiles(s);
+  renderDownloads(s.downloads);
   if (first) requestAnimationFrame(() => document.body.classList.add('ready'));
 });
