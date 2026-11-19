@@ -1,10 +1,11 @@
 import type { SuperbrowserApi } from '../preload/ui.ts';
 import { setupSuggestions } from './parts/suggestions.ts';
-import { setupPanel } from './parts/panel.ts';
+import { setupBookmarksSection } from './parts/bookmarksSection.ts';
+import { setupHistorySection } from './parts/historySection.ts';
 import { setupProfileDrag } from './parts/profileDrag.ts';
 import { el, faviconIcon, isImageUrl } from './parts/dom.ts';
 import { keyedMoves } from '../core/reorder.ts';
-import type { DownloadState, UiState, UiTab } from '../shared/types.ts';
+import type { DownloadState, Section, UiState, UiTab } from '../shared/types.ts';
 
 declare global {
   interface Window { superbrowser: SuperbrowserApi }
@@ -27,9 +28,50 @@ address.addEventListener('mousedown', (e) => {
 });
 address.addEventListener('focus', () => address.select());
 const suggestions = setupSuggestions({ address, list: byId('suggest'), sb, currentUrl: () => current?.url ?? '' });
-const panel = setupPanel({ sb, root: byId('panel'), tabs: byId('tabs') });
-sb.onLibrary((r) => { if (r.kind === 'suggestions') suggestions.onReply(r); else panel.onReply(r); });
 sb.onFocusAddress(() => { address.focus(); address.select(); });
+
+// Bookmarks and History: collapsible sections under the tabs, always in that order. Opening or folding one changes
+// only layout (the tab rows stay as they are); a folded section asks the library for nothing.
+const bookmarks = setupBookmarksSection({ sb, root: byId('sec-bookmarks') });
+const history = setupHistorySection({ sb, root: byId('sec-history') });
+const sections = {
+  bookmarks: { root: byId('sec-bookmarks'), handle: bookmarks },
+  history: { root: byId('sec-history'), handle: history },
+};
+// Main's saved openSections apply once, from the first state; after that the clicks here and main's panel requests
+// decide, and main records both (later pushes may carry a value from before a click).
+let sectionsSettled = false;
+
+function setSection(section: Section, open: boolean): void {
+  const { root, handle } = sections[section];
+  root.classList.toggle('open', open);
+  root.querySelector('.sec-a')!.textContent = open ? '▾' : '▸';
+  handle.setOpen(open);
+}
+
+for (const section of ['bookmarks', 'history'] as const) {
+  sections[section].root.querySelector('.sec-h')!.addEventListener('click', () => {
+    sectionsSettled = true;
+    const open = !sections[section].root.classList.contains('open');
+    setSection(section, open);
+    sb.send({ type: 'setSectionOpen', section, open });
+    if (open) sections[section].handle.focusSearch();
+  });
+}
+
+sb.onPanel((req) => {
+  sectionsSettled = true;
+  setSection(req.panel, req.open);
+  if (!req.open) return;
+  sections[req.panel].handle.focusSearch();
+  if (req.panel === 'bookmarks' && req.highlight !== null) bookmarks.reveal(req.highlight);
+});
+sb.onLibrary((r) => {
+  if (r.kind === 'suggestions') suggestions.onReply(r);
+  else { bookmarks.onReply(r); history.onReply(r); }
+});
+sb.onLibraryChanged(() => { bookmarks.onLibraryChanged(); history.onLibraryChanged(); });
+sb.onStartRename((id) => bookmarks.startRename(id));
 
 backBtn.addEventListener('click', () => sb.send({ type: 'back' }));
 forwardBtn.addEventListener('click', () => sb.send({ type: 'forward' }));
@@ -190,7 +232,8 @@ sb.onState((s) => {
   const first = current === null;
   if (current !== null && current.activeProfile !== s.activeProfile) {
     suggestions.close();
-    panel.onProfileChanged(s.activeProfile);
+    bookmarks.onProfileChanged();
+    history.onProfileChanged();
   }
   current = s;
   document.body.classList.toggle('collapsed', !s.sidebarVisible);
@@ -205,5 +248,9 @@ sb.onState((s) => {
   renderTabs(s);
   renderProfiles(s);
   renderDownloads(s.downloads);
+  if (!sectionsSettled) {
+    sectionsSettled = true;
+    for (const section of ['bookmarks', 'history'] as const) setSection(section, s.openSections.includes(section));
+  }
   if (first) requestAnimationFrame(() => document.body.classList.add('ready'));
 });

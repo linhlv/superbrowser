@@ -43,7 +43,7 @@ scripts/make-icon.sh              # resources/Superbrowser.png → resources/ico
   - `historyRecorder.ts`: records visits from tab navigation events.
   - `libraryImport.ts`: copies Chrome's files to a temp dir and imports bookmarks and history (add-only).
 - **`src/preload/`**: `ui.ts` (contextBridge API for our UI pages) and `frame.ts` (per-session frame preload: passkey requests fail fast, `navigator.userAgentData` names Google Chrome).
-- **`src/ui/`**: the sidebar + bottom bar page (`index.html`, `ui.ts`) and the find bar (`find.html`, `find.ts`). Our own pages; CSP forbids inline styles/scripts. `src/ui/parts/` holds UI helper modules (`suggestions.ts`, `panel.ts`, `profileDrag.ts` for dragging profile pills, `dom.ts`) bundled into `ui.ts`; only `src/ui/*.ts` are entry points.
+- **`src/ui/`**: the sidebar + bottom bar page (`index.html`, `ui.ts`) and the find bar (`find.html`, `find.ts`). Our own pages; CSP forbids inline styles/scripts. `src/ui/parts/` holds UI helper modules (`suggestions.ts`, `bookmarksSection.ts` and `historySection.ts` for the collapsible sections under the tabs, `libraryRows.ts` for their shared rows, `profileDrag.ts` for dragging profile pills, `dom.ts`) bundled into `ui.ts`; only `src/ui/*.ts` are entry points.
 - **`src/shared/types.ts`**: types and IPC channel names shared by main, preload and UI.
 
 New logic belongs in `src/core` with a test; keep `src/main` to wiring. Tests sit next to sources as `*.test.ts` (`node:test` + `node:assert/strict`). Imports between TS files use explicit `.ts` extensions (`import { x } from './profiles.ts'`) and only erasable TS syntax (no `enum`, `namespace` or constructor parameter properties). Node runs the tests by type stripping.

@@ -19,10 +19,19 @@
     <div id="tablist"></div>
     <div id="newtab">+  New Tab</div>
   </div>
-  <section id="panel" hidden>
-    <div class="panel-h"><span id="panel-title"></span><button id="panel-close" title="Close">✕</button></div>
-    <input id="panel-search" type="search" spellcheck="false">
-    <div id="panel-list"></div>
+  <section class="sec" id="sec-bookmarks">
+    <button class="sec-h" title="Bookmarks ⌥⌘B"><span class="sec-a">▸</span>Bookmarks</button>
+    <div class="sec-b">
+      <input class="sec-search" type="search" spellcheck="false" autocomplete="off" placeholder="Search bookmarks">
+      <div class="sec-list"></div>
+    </div>
+  </section>
+  <section class="sec" id="sec-history">
+    <button class="sec-h" title="History ⌘Y"><span class="sec-a">▸</span>History</button>
+    <div class="sec-b">
+      <input class="sec-search" type="search" spellcheck="false" autocomplete="off" placeholder="Search history">
+      <div class="sec-list"></div>
+    </div>
   </section>
   <section id="downloads" hidden>
     <div class="dl-h">Downloads</div>

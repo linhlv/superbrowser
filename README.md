@@ -1,6 +1,6 @@
 # Superbrowser
 
-A macOS browser that shows every Chrome profile in one ordinary window. It has an Arc-style sidebar with the tabs of the current profile and a slim profile bar at the bottom: click a profile's dot or press ⌃1…⌃9 to switch. Each profile has its own isolated storage, so every profile stays signed in to its own accounts at the same time. Profile names and colours come from Chrome; the bar order is your own. Logins, bookmarks and history can be imported from Chrome so you don't start over. Superbrowser is built on Electron (Chromium) and presents itself to sites as Google Chrome.
+A macOS browser that shows every Chrome profile in one ordinary window. It has an Arc-style sidebar with the tabs of the current profile, its bookmarks and history in collapsible sections under them, and a slim profile bar at the bottom: click a profile's dot or press ⌃1…⌃9 to switch. Each profile has its own isolated storage, so every profile stays signed in to its own accounts at the same time. Profile names and colours come from Chrome; the bar order is your own. Logins, bookmarks and history can be imported from Chrome so you don't start over. Superbrowser is built on Electron (Chromium) and presents itself to sites as Google Chrome.
 
 Requires macOS on Apple Silicon, Google Chrome (for profiles and login import), Node 22 and the Command Line Tools (no Xcode).
 
@@ -47,9 +47,10 @@ A normal import only adds logins Superbrowser doesn't have yet. It never signs y
 - Bookmarks come from each profile's `Bookmarks` and `AccountBookmarks` files, merged without duplicates, with the bookmarks bar at the top level and the rest in "Other Bookmarks" and "Mobile Bookmarks" folders. Only http and https addresses are kept. A folder is created only when at least one bookmark is added to it, so empty Chrome folders aren't imported.
 - It only adds. Running it again adds nothing already there (each line reads "0 bookmarks, 0 pages of history imported (N skipped)."), doesn't bring back a folder you renamed or deleted, and never changes Chrome.
 - If a profile's history or bookmarks file can't be read (Chrome may be busy writing it), the summary is a warning and that line says so, for example "Personal: 175 bookmarks imported; history couldn't be read — try again." The rest still imports.
-- Superbrowser then records your own browsing in each profile's history. Address suggestions and the History and Bookmarks panels use it, one profile at a time.
+- Superbrowser then records your own browsing in each profile's history. Address suggestions and the sidebar's Bookmarks and History sections use it, one profile at a time.
 - **Bookmarks ▸ Bookmark This Page** (⌘D) adds the shown page. **History ▸ Clear History…** clears the shown profile's history after a confirmation.
-- Right-click ▸ **Delete from History** in the History panel removes every visit to that page, not just the row clicked.
+- The sidebar has **Bookmarks** and **History** sections under the tabs, folded at first. Click a header (or press ⌥⌘B / ⌘Y) to open or fold it. Both can be open at once; the tab list then takes up to about half the sidebar and each part scrolls on its own. Which sections are open is remembered across launches, for all profiles.
+- Right-click ▸ **Delete from History** in the History section removes every visit to that page, not just the row clicked.
 
 ## Shortcuts
 
@@ -67,9 +68,9 @@ A normal import only adds logins Superbrowser doesn't have yet. It never signs y
 | ⌘F, ⌘G, ⇧⌘G | Find in page, next, previous (Esc closes) |
 | ⌘+ (or ⌘=), ⌘−, ⌘0 | Zoom in, out, actual size |
 | ⌃⌘F | Full screen |
-| ⌘Y | Show or hide History in the sidebar |
+| ⌘Y | Open or fold History in the sidebar |
 | ⌘D | Bookmark this page |
-| ⌥⌘B | Show or hide Bookmarks in the sidebar |
+| ⌥⌘B | Open or fold Bookmarks in the sidebar |
 | ⌘P | Print |
 | ⌥⌘I | Developer Tools for the page |
 | ⌘Q, red button | Quit (tabs come back on the next launch) |
@@ -187,13 +188,14 @@ Walk this list on the installed app after a change that affects it.
 34. **Profiles ▸ Import Bookmarks and History from Chrome**: no Keychain prompt and no tab reload. One sheet lists a line per visible profile, such as "Personal: 175 bookmarks, 12,685 pages of history imported (3 skipped).". Run it again: every line reads "0 bookmarks, 0 pages of history imported (N skipped).". It also works while Chrome is running, and Chrome's bookmarks and history are unchanged afterwards. The "+" menu has the same item.
 35. On first run (see Login import), the question reads "Import your logins, bookmarks and history from Chrome for all profiles?". **Import All** runs the logins import, then this one with its own summary. Cancelling the logins explanation still imports bookmarks and history.
 36. Click the address field and type part of a page title or host. At most 6 rows appear under the field with stars on bookmarks and "Search Google for …" last. Enter with no row selected goes to what you typed. Arrow keys move through rows, Up past the first restores your text, and Esc restores the address and closes the list. A host completes inline, and Backspace removes the completion. A completion that runs into a path keeps its capitals (try a Google Docs link: Enter opens the document). ⌃2 closes the list, and then only that profile's pages are suggested.
-37. Browse in one profile: open A, click through to B, reload B, go Back, then type a new address C. Only visits are recorded (not reload or Back as new visits). Reopening a closed tab with ⇧⌘T adds no visit. Another profile's History panel doesn't show these pages.
-38. ⌘Y turns the sidebar into History with the search box focused. Rows are grouped by Today, Yesterday and dates, each with its time and host. Typing "ho so" finds Vietnamese titles such as "Hồ sơ…". Scrolling to the bottom loads older days. A click opens the page in the current tab and ⌘-click in a new tab. Right-click ▸ **Delete from History** removes every visit to that page (all its rows, on every day) and its suggestion. Esc, ✕ or ⌘Y closes the panel, and Downloads stay visible.
-39. ⌥⌘B shows the imported folders. Click a folder to open or close it; an unnamed folder shows "Untitled". Searching shows a flat list with folder paths. Right-click a bookmark: Open in New Tab, Copy Link, Rename…, Move to ▸, Delete. Right-click a folder: New Folder…, Rename…, Delete (a non-empty folder asks first). In Rename, Enter saves and Esc or clicking away cancels.
-40. ⌘D on a page opens Bookmarks with the new bookmark highlighted at the top. ⌘D again highlights it and adds no duplicate. ⌘D on a new tab page adds nothing. With a popup focused, ⌘Y, ⌥⌘B and ⌘D act on the main window.
-41. With the sidebar hidden (⌘S), ⌘Y and ⌥⌘B show the sidebar first, with the panel open, even if that panel was open when the sidebar was hidden. With the History panel open and the sidebar hidden, switch profile, then show the sidebar: only the first page of history loads, and more loads as you scroll.
-42. With a panel open, ⌃2 empties and refills it with that profile's data and keeps the search text. **History ▸ Clear History…** asks "Clear all history for <profile>?". Cancel keeps it, and Clear empties only that profile's history (another profile's suggestions still work).
+37. Browse in one profile: open A, click through to B, reload B, go Back, then type a new address C. Only visits are recorded (not reload or Back as new visits). Reopening a closed tab with ⇧⌘T adds no visit. Another profile's History section doesn't show these pages.
+38. ⌘Y opens the History section under the tabs with its search box focused; the tab list stays. Rows are grouped by Today, Yesterday and dates, each with its time and host. Typing "ho so" finds Vietnamese titles such as "Hồ sơ…". Scrolling to the bottom loads older days. A click opens the page in the current tab and ⌘-click in a new tab. Right-click ▸ **Delete from History** removes every visit to that page (all its rows, on every day) and its suggestion. ⌘Y or a click on its header folds it, and Downloads stay visible.
+39. ⌥⌘B opens the Bookmarks section with the imported folders. Click a folder to open or close it; an unnamed folder shows "Untitled". Searching shows a flat list with folder paths. Right-click a bookmark: Open in New Tab, Copy Link, Rename…, Move to ▸, Delete. Right-click a folder: New Folder…, Rename…, Delete (a non-empty folder asks first). In Rename, Enter saves and Esc or clicking away cancels.
+40. ⌘D on a page opens the Bookmarks section (if folded) with the new bookmark highlighted at the top. ⌘D again highlights it and adds no duplicate. ⌘D on a new tab page adds nothing. With a popup focused, ⌘Y, ⌥⌘B and ⌘D act on the main window.
+41. With the sidebar hidden (⌘S), ⌘Y and ⌥⌘B show the sidebar first, with the section open, even if that section was open when the sidebar was hidden (they never fold it then). With the History section open and the sidebar hidden, switch profile, then show the sidebar: only the first page of history loads, and more loads as you scroll.
+42. With a section open, ⌃2 empties and refills it with that profile's data and keeps the search text; which sections are open doesn't change. **History ▸ Clear History…** asks "Clear all history for <profile>?". Cancel keeps it, and Clear empties only that profile's history (another profile's suggestions still work).
 43. Drag the 4th profile's dot to the front: the others slide aside, the drop sticks without a flicker, ⌃1 now shows that profile, and a relaunch keeps the order. A click (even with a slight wobble) still switches profile and right-click still shows Move Left/Right. Esc mid-drag, or letting go above the bar, puts it back. Dragging a dot never moves the window, while dragging the bar's empty space still does. Hide a profile, reorder the others, then show it again: it is back in its old place.
+44. Under the tabs, **Bookmarks** and **History** headers are folded on first launch. Click Bookmarks: it opens under the tabs, the tab list stays and shrinks to at most about half the sidebar, and both scroll on their own. Open History too: the two share the space. Quit and relaunch: both are still open. Click a header while a page is loading: it stays the way you clicked it. Esc in a section's search clears it, then leaves the field; it never folds the section. ⌘Y folds History; ⌘Y again opens it with the search focused.
 
 ## Privacy
 
