@@ -33,6 +33,14 @@ test('parseUiCommand: accepts every well-formed command and keeps only its field
     { type: 'find', text: 'needle', forward: true },
     { type: 'find', text: '', forward: false },
     { type: 'findClose' },
+    { type: 'suggest', seq: 0, text: 'jira' },
+    { type: 'historyPage', seq: 3, query: '', before: null },
+    { type: 'historyPage', seq: 4, query: 'ho so', before: 1762272000000 },
+    { type: 'bookmarks', seq: 7 },
+    { type: 'openUrl', url: 'https://a.com/x', newTab: true },
+    { type: 'historyMenu', url: 'https://a.com/x' },
+    { type: 'bookmarkMenu', id: 5 },
+    { type: 'renameBookmark', id: 5, title: 'Sprint board' },
   ];
   for (const c of cases) assert.deepEqual(parseUiCommand(c, known), c);
   assert.deepEqual(parseUiCommand({ type: 'back', extra: 'x' }, known), { type: 'back' });
@@ -75,4 +83,17 @@ test('parseUiCommand: find needs a string text and a boolean direction', () => {
 test('parseUiCommand: revealDownload needs a non-empty id', () => {
   assert.equal(parseUiCommand({ type: 'revealDownload', id: '' }, known), null);
   assert.equal(parseUiCommand({ type: 'revealDownload' }, known), null);
+});
+
+test('parseUiCommand: rejects bad library commands', () => {
+  const bad: unknown[] = [
+    { type: 'suggest', seq: -1, text: 'x' }, { type: 'suggest', seq: 1.5, text: 'x' }, { type: 'suggest', seq: 1, text: 'x'.repeat(2049) },
+    { type: 'historyPage', seq: 1, query: 'x', before: 'yesterday' }, { type: 'historyPage', seq: 1, query: 'x', before: Infinity },
+    { type: 'bookmarks' },
+    { type: 'openUrl', url: 'javascript:alert(1)', newTab: false }, { type: 'openUrl', url: 'https://a.com' },
+    { type: 'historyMenu', url: 'file:///etc/passwd' },
+    { type: 'bookmarkMenu', id: 0 }, { type: 'bookmarkMenu', id: '5' },
+    { type: 'renameBookmark', id: 5, title: 'x'.repeat(1025) }, { type: 'renameBookmark', id: 5 },
+  ];
+  for (const c of bad) assert.equal(parseUiCommand(c, known), null, JSON.stringify(c).slice(0, 80));
 });

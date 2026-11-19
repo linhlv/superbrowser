@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { toNavigableUrl } from './address.ts';
+import { isWebUrl, toNavigableUrl } from './address.ts';
 
 const cases: [string, string | null][] = [
   ['', null], ['   ', null],
@@ -17,3 +17,9 @@ const cases: [string, string | null][] = [
   ['c++ tutorial', 'https://www.google.com/search?q=c%2B%2B%20tutorial'],
 ];
 for (const [input, want] of cases) test(`toNavigableUrl(${JSON.stringify(input)})`, () => assert.equal(toNavigableUrl(input), want));
+
+test('isWebUrl: only parseable http(s) URLs', () => {
+  for (const u of ['https://a.com', 'http://localhost:3000/x', 'HTTPS://A.COM/']) assert.equal(isWebUrl(u), true);
+  for (const u of ['about:blank', 'data:text/html,x', 'javascript:alert(1)', 'chrome://history', 'file:///etc', 'https://', '', 'not a url'])
+    assert.equal(isWebUrl(u), false);
+});

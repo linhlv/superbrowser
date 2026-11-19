@@ -13,3 +13,13 @@ export function toNavigableUrl(input: string): string | null {
   }
   return `https://www.google.com/search?q=${encodeURIComponent(text)}`;
 }
+
+/** True for http(s) URLs that `new URL` parses (the only ones bookmarks and history store). */
+export function isWebUrl(url: string): boolean {
+  try {
+    const { protocol } = new URL(url);
+    return protocol === 'http:' || protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
