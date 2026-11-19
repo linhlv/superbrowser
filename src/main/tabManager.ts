@@ -14,7 +14,8 @@ const NEW_TAB_URL = 'https://www.google.com';
 /**
  * One WebContentsView per opened tab, all children of the window. Only the active profile's
  * active tab is visible; switching profile or tab toggles visibility and never reloads.
- * Restored tabs get their view (and load) only when first shown.
+ * Restored tabs get their view (and load) when first shown, or for each visible profile's
+ * active tab at startup (`loadActiveTabs`).
  */
 export class TabManager {
   private readonly win: BrowserWindow;
@@ -111,6 +112,21 @@ export class TabManager {
   shutDown(): void {
     this.shuttingDown = true;
     for (const view of this.views.values()) openContents(view)?.close();
+  }
+
+  /**
+   * Loads the active tab of each of `dirs` (in order, `staggerMs` apart so startup isn't one burst) that has no
+   * view yet. They stay hidden until shown; profiles that are no longer visible by then are skipped.
+   */
+  loadActiveTabs(dirs: string[], staggerMs: number): void {
+    dirs.forEach((dir, i) => {
+      setTimeout(() => {
+        if (this.shuttingDown || this.win.isDestroyed() || !this.dirs.includes(dir)) return;
+        const tabs = this.profiles.get(dir);
+        const tab = tabs?.tabs.find((t) => t.id === tabs.activeId);
+        if (tab && !this.views.has(tab.id)) this.createView(dir, tab);
+      }, (i + 1) * staggerMs);
+    });
   }
 
   private removeTab(id: number): void {

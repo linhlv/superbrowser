@@ -30,6 +30,9 @@ function describe(value: unknown): string {
 /** A rejected promise nobody awaits: logged, not an unhandled rejection. */
 const logFailure = (what: string) => (e: unknown): void => log(`${what} failed: ${e instanceof Error ? e.stack ?? e.message : String(e)}`);
 
+/** Startup loads each visible profile's active tab, the shown one first and the others this far apart. */
+const STARTUP_STAGGER_MS = 300;
+
 /** Zoom levels (factor 1.2^level) step by half a level; Chromium allows factors 0.25–5. */
 const ZOOM_STEP = 0.5, MIN_ZOOM = -7.5, MAX_ZOOM = 8.5;
 
@@ -310,7 +313,11 @@ function start(): void {
 
     rebuildMenu();
     const first = profiles.visible.find((p) => p.dir === state.activeProfile) ?? profiles.visible[0];
-    if (first) tabs.showProfile(first.dir);
+    if (first) {
+      tabs.showProfile(first.dir);
+      // Every visible profile's active tab runs from the start (mail, calendar reminders); hidden ones stay lazy.
+      tabs.loadActiveTabs(profiles.visible.map((p) => p.dir).filter((dir) => dir !== first.dir), STARTUP_STAGGER_MS);
+    }
     store.save(state);
 
     if (!state.firstRunDone) {
