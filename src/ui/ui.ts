@@ -30,7 +30,7 @@ address.addEventListener('focus', () => address.select());
 const suggestions = setupSuggestions({ address, list: byId('suggest'), sb, currentUrl: () => current?.url ?? '' });
 sb.onFocusAddress(() => { address.focus(); address.select(); });
 
-// Bookmarks and History: collapsible sections above the tabs, always in that order. Opening or folding one changes
+// Bookmarks and History: collapsible sections right under the tabs, always in that order. Opening or folding one changes
 // only layout (the tab rows stay as they are); a folded section asks the library for nothing.
 const bookmarks = setupBookmarksSection({ sb, root: byId('sec-bookmarks') });
 const history = setupHistorySection({ sb, root: byId('sec-history') });
