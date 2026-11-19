@@ -1,0 +1,94 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+Superbrowser is a macOS (Apple Silicon) browser built with Electron + TypeScript. It shows every Chrome profile in one window: an Arc-style sidebar holds the current profile's tabs, and a bottom profile bar switches profile (click or ⌃1…⌃9). Each Chrome profile gets its own Electron session partition. Logins can be imported from Chrome's cookies. README.md covers install, behaviour, known limits and the manual end-to-end checklist ("Verify it works"). v1 (a Swift app that stacked real Chrome windows, plus a helper extension) was retired and lives only in git history.
+
+## Commands
+
+```
+npm install                       # once (Node 22, Command Line Tools only; no Xcode)
+npm test                          # all unit tests: node --test "src/**/*.test.ts"
+node --test src/core/tabs.test.ts # one file
+npm run typecheck                 # tsc --noEmit
+npm run build                     # esbuild src → dist/ (main.cjs, preload/*.cjs, ui/*)
+npm start                         # build + run in Electron (dev; the menu bar says "Electron")
+scripts/build-app.sh [--install]  # tests, build, package build/Superbrowser-darwin-arm64/Superbrowser.app, ad-hoc sign; --install quits Superbrowser and replaces ~/Applications/Superbrowser.app
+scripts/make-icon.sh              # resources/Superbrowser.png → resources/icon.icns (commit both)
+```
+
+- `npm start` and the packaged app share `~/Library/Application Support/Superbrowser` because `productName` is `Superbrowser` in package.json (the staged package.json copies it). Keep it.
+- The app logs to stderr with the `Superbrowser:` prefix (`log` in `src/main/main.ts`).
+- Bumping Electron (`npm install electron@latest`, rebuild) is meant to be routine. The UA and client hints derive from `process.versions.chrome`, so don't hard-code a version anywhere.
+
+## Architecture
+
+- **`src/core/`**: pure logic, unit-tested under plain Node. It must **never import `electron`**. Covers:
+  - address parsing, UA/client hints, Chrome profile parsing and merging;
+  - state decode and atomic store, the tab model, layout maths;
+  - cookie decryption and import planning, the permission policy and prompt queue;
+  - download names, context-menu spec, UI command validation (`uiProtocol.ts`).
+- **`src/main/`**: thin Electron adapters wired together in `main.ts`:
+  - `sessions.ts`: per-profile session, UA, permissions, frame preload, downloads.
+  - `tabManager.ts`: one `WebContentsView` per tab, lazy restore, muting.
+  - `browserWindow.ts`: window, UI view, find bar, layout.
+  - `pages.ts`: new windows, popups, context menu.
+  - `profileManager.ts`: order, hide/unhide, dot menu.
+  - `importer.ts` and `importFlow.ts`: login import and its sheets.
+  - `menu.ts`: the application menu and every shortcut. It is the source of truth for shortcuts.
+  - `chrome.ts`: reads Chrome's `Local State`; opens a profile in Chrome.
+  - `downloads.ts`.
+- **`src/preload/`**: `ui.ts` (contextBridge API for our UI pages) and `frame.ts` (per-session frame preload that makes passkey requests fail fast).
+- **`src/ui/`**: the sidebar + bottom bar page (`index.html`, `ui.ts`) and the find bar (`find.html`, `find.ts`). Our own pages; CSP forbids inline styles/scripts.
+- **`src/shared/types.ts`**: types and IPC channel names shared by main, preload and UI.
+
+New logic belongs in `src/core` with a test; keep `src/main` to wiring. Tests sit next to sources as `*.test.ts` (`node:test` + `node:assert/strict`). Imports between TS files use explicit `.ts` extensions (`import { x } from './profiles.ts'`) and only erasable TS syntax (no `enum`, `namespace` or constructor parameter properties). Node runs the tests by type stripping.
+
+Window structure: one `BrowserWindow`. Its child views stack in insertion order:
+
+- the UI view first, filling the window;
+- each tab's view on top, only the active one visible;
+- the find bar view, re-raised whenever it is shown.
+
+Popups are separate small windows. Closing the main window quits. ⌘W never closes the window.
+
+## Invariants that are easy to break
+
+- **Profile isolation.** The partition is exactly `persist:<chrome profile dir>` (`persist:Default`, `persist:Profile 37`). Get a session only through `profileSession(dir)`. Every web contents, popup, download, service worker and permission decision belongs to exactly one profile. A profile's cookies or storage must never reach another, and nothing may use the default session for pages.
+- **Popups and new tabs inherit the opener's profile.**
+  - Tab views use `pageWebPreferences(dir)`.
+  - Popups use `popupWindowOptions(dir)` (partition plus `PAGE_WEB_PREFERENCES`).
+  - `windowOpenTarget` decides tab, popup or deny: `blob:` opens as a popup, and anything but http(s), `blob:` and `about:blank` is denied.
+- **Pages get no privileged API.**
+  - `src/preload/frame.ts` is registered per profile session. It runs in subframes because page views set `nodeIntegrationInSubFrames` (sandboxed, so pages still get no Node). It must never expose an API, IPC or `contextBridge.exposeInMainWorld` to pages. It only wraps `navigator.credentials` via `executeInMainWorld`.
+  - UI commands are listened for only on the UI and find views' own `webContents.ipc`, and validated by `parseUiCommand`. The find view only accepts find commands.
+  - Any `ipcMain` handler you add must reject senders that aren't the app's UI or find views.
+- **Chrome data is read-only.**
+  - Never write to `~/Library/Application Support/Google/Chrome/**` or the "Chrome Safe Storage" Keychain item.
+  - Copy a `Cookies` DB to a temp file before reading it.
+  - Import is add-only. Only the explicit, confirmed "Replace Logins" overwrites.
+  - A cookie that can't be imported is skipped and counted; it never aborts the import.
+- **Site permissions are never granted silently** (Electron's default allows everything); `policyFor` decides allow/ask/deny.
+  - Only Allow decisions are persisted. Block lasts for the app run.
+  - Prompts are tied to their tab: one pending prompt per tab, and a prompt from a page that navigated or closed is dropped.
+- **Browser identity:**
+  - UA `… Chrome/<major>.0.0.0 Safari/537.36`.
+  - `Sec-CH-UA` brands `"Google Chrome"`, `"Chromium"` and `"Not_A Brand"`.
+  - `<major>` is the major of `process.versions.chrome`.
+  - Never automate sign-in.
+- **Profiles from Chrome:** a missing, unreadable or mid-write `Local State` (empty `info_cache`) keeps the profiles already known (`mergeProfiles`). Profiles deleted in Chrome stay until hidden. The bar is never empty.
+- **State:** `state.json` decodes tolerantly. A bad or missing field falls back to its default without losing the others, a corrupt file is set aside, and writes are atomic. v1's `settings.json` next to it is ignored.
+- **Lazy restore:** after launch, only each profile's active tab loads. Others load when first shown. Within a run, tabs are never unloaded, and switching tab or profile never reloads.
+- **Hidden profiles:** their tab views keep running but are muted (`setAudioMuted`) while hidden.
+
+## Docs
+
+- `docs/superpowers/specs/2026-11-19-superbrowser-electron-design.md`: intent, goals, non-goals and anti-goals for v2. The anti-goals:
+  - no cross-profile leaks;
+  - don't get a client account flagged;
+  - never break the user's Chrome;
+  - no silent permissions;
+  - no flicker or reloads;
+  - never lose tabs or logins.
+- `docs/superpowers/plans/2026-11-19-superbrowser-electron.md`: the implementation plan. Its **Deviations during execution** section records where the code intentionally differs; update it when you change one of those decisions.
+- `docs/superpowers/specs/2026-11-18-superbrowser-design.md` and `docs/superpowers/plans/2026-11-18-superbrowser.md` cover v1 (superseded).
