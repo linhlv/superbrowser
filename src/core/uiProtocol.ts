@@ -28,11 +28,15 @@ export function parseUiCommand(raw: unknown, knownDirs: ReadonlySet<string>): Ui
       return typeof raw['input'] === 'string' ? { type, input: raw['input'] } : null;
     case 'revealDownload':
       return typeof id === 'string' ? { type, id } : null;
+    case 'find':
+      return typeof raw['text'] === 'string' && typeof raw['forward'] === 'boolean'
+        ? { type, text: raw['text'], forward: raw['forward'] } : null;
     case 'newTab':
     case 'back':
     case 'forward':
     case 'reload':
     case 'toggleSidebar':
+    case 'findClose':
       return { type };
     default:
       return null;

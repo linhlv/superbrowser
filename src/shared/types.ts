@@ -14,5 +14,10 @@ export type UiCommand =
   | { type: 'selectProfile'; dir: string } | { type: 'profileMenu'; dir: string }
   | { type: 'selectTab'; id: number } | { type: 'closeTab'; id: number } | { type: 'newTab' }
   | { type: 'navigate'; input: string } | { type: 'back' } | { type: 'forward' } | { type: 'reload' }
-  | { type: 'toggleSidebar' } | { type: 'revealDownload'; id: string };
-export const IPC = { state: 'ui:state', command: 'ui:command', focusAddress: 'ui:focus-address' } as const;
+  | { type: 'toggleSidebar' } | { type: 'revealDownload'; id: string }
+  | { type: 'find'; text: string; forward: boolean } | { type: 'findClose' };
+export type FindResult = { active: number; matches: number };
+export const IPC = {
+  state: 'ui:state', command: 'ui:command', focusAddress: 'ui:focus-address',
+  findResult: 'ui:find-result', findFocus: 'ui:find-focus',
+} as const;

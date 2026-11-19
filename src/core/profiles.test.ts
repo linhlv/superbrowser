@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { argbToHex, parseLocalState, mergeProfiles, arrangeProfiles } from './profiles.ts';
+import { argbToHex, parseLocalState, mergeProfiles, arrangeProfiles, moveProfile, hideProfile } from './profiles.ts';
 import type { Profile } from '../shared/types.ts';
 
 const p = (dir: string, name = dir, color = '#808080'): Profile => ({ dir, name, color });
@@ -67,4 +67,45 @@ test('arrangeProfiles applies order and hidden', () => {
   const got = arrangeProfiles(all, ['C', 'Z', 'A'], ['A', 'D']);
   assert.deepEqual(got.visible.map((x) => x.dir), ['C', 'B']);
   assert.deepEqual(got.hidden.map((x) => x.dir), ['A', 'D']);
+});
+
+test('moveProfile swaps with the visible neighbour and returns the full order', () => {
+  const all = [p('A'), p('B'), p('C'), p('D')];
+  assert.deepEqual(moveProfile(all, [], [], 'B', 1), ['A', 'C', 'B', 'D']);
+  assert.deepEqual(moveProfile(all, [], [], 'B', -1), ['B', 'A', 'C', 'D']);
+  assert.deepEqual(moveProfile(all, ['C', 'A'], [], 'A', -1), ['A', 'C', 'B', 'D']);
+});
+
+test('moveProfile skips hidden profiles, which keep their places', () => {
+  const all = [p('A'), p('B'), p('C'), p('D')];
+  // visible: A, C, D — moving A right swaps it with C; hidden B stays second.
+  assert.deepEqual(moveProfile(all, [], ['B'], 'A', 1), ['C', 'B', 'A', 'D']);
+  assert.deepEqual(moveProfile(all, [], ['B'], 'C', -1), ['C', 'B', 'A', 'D']);
+});
+
+test('moveProfile drops unknown dirs from the saved order', () => {
+  assert.deepEqual(moveProfile([p('A'), p('B')], ['Z', 'B'], [], 'A', -1), ['A', 'B']);
+});
+
+test('moveProfile is null at either end, for hidden or unknown profiles', () => {
+  const all = [p('A'), p('B'), p('C')];
+  assert.equal(moveProfile(all, [], [], 'A', -1), null);
+  assert.equal(moveProfile(all, [], [], 'C', 1), null);
+  assert.equal(moveProfile(all, [], ['C'], 'B', 1), null);
+  assert.equal(moveProfile(all, [], ['B'], 'B', 1), null);
+  assert.equal(moveProfile(all, [], [], 'Z', 1), null);
+});
+
+test('hideProfile adds a visible profile to the hidden list', () => {
+  const all = [p('A'), p('B'), p('C')];
+  assert.deepEqual(hideProfile(all, ['A'], 'B'), ['A', 'B']);
+  assert.deepEqual(hideProfile(all, [], 'C'), ['C']);
+});
+
+test('hideProfile is null for the last visible profile, a hidden one or an unknown one', () => {
+  const all = [p('A'), p('B'), p('C')];
+  assert.equal(hideProfile(all, ['A', 'B'], 'C'), null);
+  assert.equal(hideProfile([p('A')], [], 'A'), null);
+  assert.equal(hideProfile(all, ['A'], 'A'), null);
+  assert.equal(hideProfile(all, [], 'Z'), null);
 });

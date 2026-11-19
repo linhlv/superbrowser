@@ -29,6 +29,9 @@ test('parseUiCommand: accepts every well-formed command and keeps only its field
     { type: 'reload' },
     { type: 'toggleSidebar' },
     { type: 'revealDownload', id: 'd1' },
+    { type: 'find', text: 'needle', forward: true },
+    { type: 'find', text: '', forward: false },
+    { type: 'findClose' },
   ];
   for (const c of cases) assert.deepEqual(parseUiCommand(c, known), c);
   assert.deepEqual(parseUiCommand({ type: 'back', extra: 'x' }, known), { type: 'back' });
@@ -59,4 +62,11 @@ test('parseUiCommand: string payloads must be strings', () => {
   assert.equal(parseUiCommand({ type: 'navigate', input: 5 }, known), null);
   assert.equal(parseUiCommand({ type: 'navigate' }, known), null);
   assert.equal(parseUiCommand({ type: 'revealDownload', id: 5 }, known), null);
+});
+
+test('parseUiCommand: find needs a string text and a boolean direction', () => {
+  assert.equal(parseUiCommand({ type: 'find', text: 5, forward: true }, known), null);
+  assert.equal(parseUiCommand({ type: 'find', forward: true }, known), null);
+  assert.equal(parseUiCommand({ type: 'find', text: 'x' }, known), null);
+  assert.equal(parseUiCommand({ type: 'find', text: 'x', forward: 'yes' }, known), null);
 });

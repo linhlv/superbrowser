@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { tabBounds, restoreBounds, SIDEBAR_W, GAP, BOTTOM_H } from './layout.ts';
+import { tabBounds, restoreBounds, findBarBounds, SIDEBAR_W, GAP, BOTTOM_H } from './layout.ts';
 
 test('layout constants', () => {
   assert.deepEqual([SIDEBAR_W, GAP, BOTTOM_H], [240, 8, 40]);
@@ -32,4 +32,9 @@ test('restoreBounds drops a rect with only a 50-px sliver on screen', () => {
 
 test('restoreBounds without saved bounds uses the fallback', () => {
   assert.deepEqual(restoreBounds(null, screens, fallback), fallback);
+});
+
+test('findBarBounds: 320×44, 8 px from the tab rect\'s top and right edges', () => {
+  assert.deepEqual(findBarBounds({ x: 240, y: 8, width: 1152, height: 852 }), { x: 1064, y: 16, width: 320, height: 44 });
+  assert.deepEqual(findBarBounds({ x: 8, y: 8, width: 1384, height: 852 }), { x: 1064, y: 16, width: 320, height: 44 });
 });

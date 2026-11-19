@@ -17,6 +17,8 @@ export function readChromeProfiles(): Profile[] | null {
   }
 }
 
-export function openProfileInChrome(dir: string): void {
-  execFile('open', ['-na', 'Google Chrome', '--args', `--profile-directory=${dir}`]);
+export function openProfileInChrome(dir: string, log: (msg: string) => void): void {
+  execFile('open', ['-na', 'Google Chrome', '--args', `--profile-directory=${dir}`], (err) => {
+    if (err) log(`could not open profile ${dir} in Chrome: ${err.message}`);
+  });
 }

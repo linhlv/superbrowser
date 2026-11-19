@@ -8,6 +8,13 @@ export function tabBounds(size: { width: number; height: number }, sidebarVisibl
   return { x, y: GAP, width: size.width - x - GAP, height: size.height - GAP - BOTTOM_H };
 }
 
+export const FIND_W = 320, FIND_H = 44, FIND_INSET = 8;
+
+/** The find-in-page bar: top-right inside the tab rect. */
+export function findBarBounds(tab: Rect): Rect {
+  return { x: tab.x + tab.width - FIND_W - FIND_INSET, y: tab.y + FIND_INSET, width: FIND_W, height: FIND_H };
+}
+
 const MIN_VISIBLE = 100;
 
 /** Saved bounds are kept only if at least 100×100 px of them lie on one work area; else the fallback size (window centers itself). */
