@@ -1,4 +1,5 @@
 import { Menu, type MenuItemConstructorOptions } from 'electron';
+import type { ImportMode } from '../core/cookies.ts';
 import type { Profile } from '../shared/types.ts';
 
 /** What the application menu shows and does. Rebuild the menu when a shown field changes. */
@@ -22,6 +23,9 @@ export type MenuContext = {
   back(): void;
   forward(): void;
   showProfile(dir: string): void;
+  /** Copy the shown profile's logins from Chrome: 'add' keeps the session's cookies, 'replace' (confirmed) overwrites. */
+  importLogins(mode: ImportMode): void;
+  importLoginsForAllProfiles(): void;
   openActiveProfileInChrome(): void;
   unhideProfile(dir: string): void;
   /** 1–8 select by position, 9 the last tab. */
@@ -112,6 +116,10 @@ export function buildMenu(ctx: MenuContext): Menu {
       label: 'Profiles',
       submenu: [
         ...profileItems,
+        sep,
+        { label: 'Import Logins from Chrome', click: () => ctx.importLogins('add') },
+        { label: 'Import Logins for All Profiles', click: () => ctx.importLoginsForAllProfiles() },
+        { label: 'Replace Logins from Chrome…', click: () => ctx.importLogins('replace') },
         sep,
         { label: 'Open This Profile in Chrome', click: () => ctx.openActiveProfileInChrome() },
         { label: 'Show Hidden Profiles', enabled: ctx.hiddenProfiles.length > 0, submenu: hiddenItems },

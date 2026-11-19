@@ -144,6 +144,13 @@ export class TabManager {
     }
   }
 
+  /** Reloads the profile's tabs that have loaded (lazy ones load fresh when first shown anyway). */
+  reloadProfile(dir: string): void {
+    for (const [id, view] of this.views) {
+      if (this.dirOf(id) === dir) view.webContents.reload();
+    }
+  }
+
   activeWebContents(): WebContents | null {
     const id = this.activeTab()?.id;
     return id === undefined ? null : this.views.get(id)?.webContents ?? null;

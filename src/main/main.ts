@@ -7,6 +7,7 @@ import { barProfiles, parseUiCommand } from '../core/uiProtocol.ts';
 import { IPC, type UiCommand, type UiState } from '../shared/types.ts';
 import { createBrowserWindow, createUiView, FindBar, layoutWindow } from './browserWindow.ts';
 import { openProfileInChrome, readChromeProfiles } from './chrome.ts';
+import { ImportFlow } from './importFlow.ts';
 import { buildMenu, type MenuContext } from './menu.ts';
 import { ProfileManager } from './profileManager.ts';
 import { configureSessions } from './sessions.ts';
@@ -88,6 +89,13 @@ function start(): void {
         pushState();
       },
     });
+    const imports = new ImportFlow({
+      window,
+      log,
+      activeProfile: () => profiles.visible.find((p) => p.dir === tabs.snapshot().dir) ?? null,
+      visibleProfiles: () => profiles.visible,
+      reloadProfile: (dir) => tabs.reloadProfile(dir),
+    });
     const relayout = () => layoutWindow(window, ui, findBar, tabs, state.sidebarVisible);
     relayout();
 
@@ -161,6 +169,8 @@ function start(): void {
       back: () => tabs.back(),
       forward: () => tabs.forward(),
       showProfile: (dir) => tabs.showProfile(dir),
+      importLogins: (mode) => void imports.importCurrent(mode),
+      importLoginsForAllProfiles: () => void imports.importAll(),
       openActiveProfileInChrome: () => {
         const dir = tabs.snapshot().dir;
         if (dir) openProfileInChrome(dir, log);
@@ -226,6 +236,14 @@ function start(): void {
     const first = profiles.visible.find((p) => p.dir === state.activeProfile) ?? profiles.visible[0];
     if (first) tabs.showProfile(first.dir);
     store.save(state);
+
+    if (!state.firstRunDone) {
+      // Once the window shows its bar and sidebar; asked once whatever the answer.
+      ui.webContents.once('did-finish-load', () => void imports.offerOnFirstRun(() => {
+        state.firstRunDone = true;
+        store.save(state);
+      }));
+    }
   });
 }
 
