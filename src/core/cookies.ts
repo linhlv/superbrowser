@@ -6,20 +6,20 @@ export function deriveKey(password: string): Buffer {
 }
 
 const IV = Buffer.alloc(16, 0x20);
-/** From Cookies DB version 24 on, Chrome prepends sha256(host_key) to the value before encrypting. */
-const HOST_HASH_DB_VERSION = 24;
 
-/** One `encrypted_value`. Throws for a prefix other than `v10` or a value the key can't decrypt. */
-export function decryptValue(encrypted: Buffer, hostKey: string, dbVersion: number, key: Buffer): string {
+/**
+ * One `encrypted_value`. Throws for a prefix other than `v10` or a value the key can't decrypt. From Cookies DB
+ * version 24 on, Chrome prepends sha256(host_key) to the value before encrypting; it is stripped wherever it is
+ * there, without trusting the DB's version (a 32-byte value equal to that hash by chance is not a risk).
+ */
+export function decryptValue(encrypted: Buffer, hostKey: string, key: Buffer): string {
   if (encrypted.length === 0) return '';
   const prefix = encrypted.subarray(0, 3).toString('latin1');
   if (prefix !== 'v10') throw new Error(`unsupported cookie encryption ${JSON.stringify(prefix)}`);
   const decipher = crypto.createDecipheriv('aes-128-cbc', key, IV);
   let plain = Buffer.concat([decipher.update(encrypted.subarray(3)), decipher.final()]);
-  if (dbVersion >= HOST_HASH_DB_VERSION) {
-    const hostHash = crypto.createHash('sha256').update(hostKey).digest();
-    if (plain.subarray(0, 32).equals(hostHash)) plain = plain.subarray(32);
-  }
+  const hostHash = crypto.createHash('sha256').update(hostKey).digest();
+  if (plain.subarray(0, 32).equals(hostHash)) plain = plain.subarray(32);
   return plain.toString('utf8');
 }
 

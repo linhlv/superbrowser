@@ -71,7 +71,7 @@ export class LoginImporter {
   /** Throws an ImportError before any session is touched when the key or Chrome's cookies can't be read. */
   async importLogins(dir: string, mode: ImportMode): Promise<ImportResult> {
     const key = await this.key();
-    const { version, rows } = await this.readRows(dir);
+    const rows = await this.readRows(dir);
     const { log, jarOf } = this.opts;
 
     let skipped = 0, failed = 0;
@@ -87,7 +87,7 @@ export class LoginImporter {
     for (const row of rows) {
       let value: string;
       try {
-        value = row.ev ? decryptValue(Buffer.from(row.ev, 'hex'), row.host_key, version, key) : row.value;
+        value = row.ev ? decryptValue(Buffer.from(row.ev, 'hex'), row.host_key, key) : row.value;
       } catch (e) {
         fail('decrypt', row, row.host_key, e);
         continue;
@@ -116,7 +116,7 @@ export class LoginImporter {
   }
 
   /** Reads a temporary copy of `<chromeDir>/<dir>/Cookies` (with its journal or WAL, so a running Chrome's state is consistent). */
-  private async readRows(dir: string): Promise<{ version: number; rows: ChromeCookieRow[] }> {
+  private async readRows(dir: string): Promise<ChromeCookieRow[]> {
     const source = path.join(this.opts.chromeDir, dir, 'Cookies');
     if (!fs.existsSync(source)) {
       throw new ImportError('Chrome has no saved logins for this profile.', 'Its Cookies file wasn\'t found. Nothing was imported.');
@@ -127,15 +127,12 @@ export class LoginImporter {
       for (const suffix of ['', '-wal', '-journal']) {
         if (suffix === '' || fs.existsSync(source + suffix)) fs.copyFileSync(source + suffix, db + suffix);
       }
-      const meta = await run('sqlite3', [db, "SELECT value FROM meta WHERE key = 'version'"]);
-      const version = Number(meta.stdout.trim());
-      if (!Number.isInteger(version)) throw new Error(`no meta version (got ${JSON.stringify(meta.stdout.trim())})`);
       const { stdout } = await run('sqlite3', ['-json', db,
         'SELECT host_key, name, value, hex(encrypted_value) AS ev, path, CAST(expires_utc AS TEXT) AS expires_utc, '
         + 'is_secure, is_httponly, samesite, has_expires, is_persistent, top_frame_site_key FROM cookies'],
       { maxBuffer: 64 * 1024 * 1024 });
       // sqlite3 -json prints nothing at all for zero rows.
-      return { version, rows: stdout.trim() === '' ? [] : JSON.parse(stdout) as ChromeCookieRow[] };
+      return stdout.trim() === '' ? [] : JSON.parse(stdout) as ChromeCookieRow[];
     } catch (e) {
       this.opts.log(`profile ${dir}: reading Chrome's Cookies failed: ${e instanceof Error ? e.message : String(e)}`);
       throw new ImportError('Superbrowser couldn\'t read Chrome\'s cookies for this profile.', 'Nothing was imported.');

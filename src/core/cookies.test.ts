@@ -18,20 +18,20 @@ test('deriveKey matches Chrome on macOS (PBKDF2-SHA1, saltysalt, 1003 rounds, 16
   assert.equal(deriveKey('peanuts').toString('hex'), 'd9a09d499b4e1b7461f28e67972c6dbd');
 });
 
-test('decryptValue strips the host hash for DB version 24', () => {
-  assert.equal(decryptValue(chromeEncrypt('abc', '.google.com', 24), '.google.com', 24, KEY), 'abc');
+test('decryptValue strips the host hash (DB version 24 on)', () => {
+  assert.equal(decryptValue(chromeEncrypt('abc', '.google.com', 24), '.google.com', KEY), 'abc');
 });
 
-test('decryptValue reads DB version 23 values, which have no host hash', () => {
-  assert.equal(decryptValue(chromeEncrypt('abc', '.google.com', 23), '.google.com', 23, KEY), 'abc');
+test('decryptValue reads values that have no host hash (DB version 23 and older)', () => {
+  assert.equal(decryptValue(chromeEncrypt('abc', '.google.com', 23), '.google.com', KEY), 'abc');
 });
 
 test('decryptValue: empty input is an empty value; other prefixes or a wrong key throw', () => {
-  assert.equal(decryptValue(Buffer.alloc(0), 'x.com', 24, KEY), '');
+  assert.equal(decryptValue(Buffer.alloc(0), 'x.com', KEY), '');
   const v11 = chromeEncrypt('abc', 'x.com', 24);
   v11.write('v11', 0);
-  assert.throws(() => decryptValue(v11, 'x.com', 24, KEY));
-  assert.throws(() => decryptValue(chromeEncrypt('abc', 'x.com', 24), 'x.com', 24, deriveKey('wrong')));
+  assert.throws(() => decryptValue(v11, 'x.com', KEY));
+  assert.throws(() => decryptValue(chromeEncrypt('abc', 'x.com', 24), 'x.com', deriveKey('wrong')));
 });
 
 const NOW = 1_800_000_000; // seconds since 1970

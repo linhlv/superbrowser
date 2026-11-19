@@ -22,8 +22,8 @@ function encrypt(value: string, hostKey: string, prefix = 'v10'): string {
 
 type Row = { host: string; name: string; value?: string; ev?: string; expires?: number; partition?: string; secure?: number };
 
-/** Chrome's `cookies` table (DB version 24) with the given rows. */
-function makeChromeDir(rows: Row[]): string {
+/** Chrome's `cookies` table (DB version 24, or `metaVersion` in its meta table) with the given rows. */
+function makeChromeDir(rows: Row[], metaVersion = '24'): string {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sb-importer-test-'));
   fs.mkdirSync(path.join(root, 'Profile 1'));
   const sq = (s: string) => `'${s.replaceAll("'", "''")}'`;
@@ -32,7 +32,7 @@ function makeChromeDir(rows: Row[]): string {
     13300000000000000, 0, 0);`).join('\n');
   const sql = `
     CREATE TABLE meta(key LONGVARCHAR NOT NULL UNIQUE PRIMARY KEY, value LONGVARCHAR);
-    INSERT INTO meta VALUES ('version', '24'), ('last_compatible_version', '24');
+    INSERT INTO meta VALUES ('version', ${sq(metaVersion)}), ('last_compatible_version', '24');
     CREATE TABLE cookies(creation_utc INTEGER NOT NULL, host_key TEXT NOT NULL, top_frame_site_key TEXT NOT NULL,
       name TEXT NOT NULL, value TEXT NOT NULL, encrypted_value BLOB NOT NULL, path TEXT NOT NULL,
       expires_utc INTEGER NOT NULL, is_secure INTEGER NOT NULL, is_httponly INTEGER NOT NULL,
@@ -56,8 +56,8 @@ class FakeJar implements CookieJar {
   async flushStore(): Promise<void> { this.flushes++; }
 }
 
-function setup(rows: Row[], readPassword: () => Promise<string> = async () => PASSWORD) {
-  const chromeDir = makeChromeDir(rows);
+function setup(rows: Row[], readPassword: () => Promise<string> = async () => PASSWORD, metaVersion?: string) {
+  const chromeDir = makeChromeDir(rows, metaVersion);
   const jar = new FakeJar();
   const jarDirs: string[] = [];
   const logs: string[] = [];
@@ -140,5 +140,12 @@ test('an empty cookies table imports nothing', async () => {
   const { chromeDir, jar, importer } = setup([]);
   assert.deepEqual(await importer.importLogins('Profile 1', 'add'), { set: 0, skipped: 0, failed: 0, total: 0 });
   assert.equal(jar.flushes, 1);
+  fs.rmSync(chromeDir, { recursive: true });
+});
+
+test('the host hash is stripped whatever the meta version says (even none)', async () => {
+  const { chromeDir, jar, importer } = setup([{ host: '.google.com', name: 'SID', ev: encrypt('sid-value', '.google.com') }], undefined, '');
+  assert.deepEqual(await importer.importLogins('Profile 1', 'add'), { set: 1, skipped: 0, failed: 0, total: 1 });
+  assert.equal(jar.setCalls[0]?.value, 'sid-value');
   fs.rmSync(chromeDir, { recursive: true });
 });
