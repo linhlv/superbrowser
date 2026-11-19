@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync, writeFileSync, readdirSync, mkdirSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { HistoryDb } from './history.ts';
+import { HistoryDb, isCorruption } from './history.ts';
 import { splitWords, dayOf } from './searchText.ts';
 
 const T0 = 1_700_000_000_000;
@@ -189,4 +189,11 @@ test('a non-corruption open failure rethrows and renames nothing', () => {
   assert.throws(() => HistoryDb.open(file, () => assert.fail('must not log')));
   assert.deepEqual(readdirSync(dir).filter((f) => f.includes('corrupt')), []);
   assert.ok(statSync(file).isDirectory());
+});
+
+test('isCorruption recognises SQLITE_CORRUPT and SQLITE_NOTADB, extended codes included', () => {
+  for (const errcode of [11, 26, 267, 523, 779, 1035]) assert.equal(isCorruption({ errcode }), true, String(errcode));
+  for (const errcode of [1, 5, 10, 14, 522, 266, '11', undefined]) assert.equal(isCorruption({ errcode }), false, String(errcode));
+  assert.equal(isCorruption(null), false);
+  assert.equal(isCorruption(new Error('x')), false);
 });

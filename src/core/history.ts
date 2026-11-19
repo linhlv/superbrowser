@@ -19,11 +19,14 @@ CREATE INDEX IF NOT EXISTS visits_time ON visits(time);`;
 
 class CorruptError extends Error {}
 
-// SQLITE_CORRUPT (11) and SQLITE_NOTADB (26) are the only failures that justify setting a database aside.
-function isCorruption(e: unknown): boolean {
+// SQLITE_CORRUPT (11) and SQLITE_NOTADB (26), with their extended codes (SQLITE_CORRUPT_VTAB = 267, …), are the
+// only failures that justify setting a database aside. The low byte of an extended code is its primary code.
+export function isCorruption(e: unknown): boolean {
   if (e instanceof CorruptError) return true;
   const code = (e as { errcode?: unknown } | null)?.errcode;
-  return code === 11 || code === 26;
+  if (typeof code !== 'number') return false;
+  const primary = code & 0xff;
+  return primary === 11 || primary === 26;
 }
 
 function openChecked(file: string): DatabaseSync {
