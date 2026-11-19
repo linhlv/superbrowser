@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { addPin, decodePins, keyOf, movePin, pinKey, pinLabel, pinTarget, rememberShown, withFavicon } from './pins.ts';
+import { addPin, decodePins, forgetUnpinned, keyOf, movePin, pinKey, pinLabel, pinTarget, rememberShown, withFavicon } from './pins.ts';
 import type { Pin } from './pins.ts';
 
 const pin = (dir: string, url: string, title = 't'): Pin => ({ dir, url, title, favicon: null });
@@ -68,4 +68,11 @@ test('pinLabel: title, else host, then the profile label', () => {
   assert.equal(pinLabel({ title: 'Inbox', url: 'https://mail.google.com/x', profileLabel: 'ACME' }), 'Inbox · ACME');
   assert.equal(pinLabel({ title: '', url: 'https://mail.google.com:8443/x', profileLabel: 'Me' }), 'mail.google.com:8443 · Me');
   assert.equal(pinLabel({ title: '', url: 'not a url', profileLabel: 'Me' }), 'not a url · Me');
+});
+test('forgetUnpinned: drops keys no longer pinned, same map when none go', () => {
+  const ps = [pin('A', 'https://a.com')];
+  const m = new Map([['A|a.com', 1], ['A|b.com', 2]]);
+  assert.deepEqual([...forgetUnpinned(m, ps)], [['A|a.com', 1]]);
+  const kept = new Map([['A|a.com', 1]]);
+  assert.equal(forgetUnpinned(kept, ps), kept);
 });

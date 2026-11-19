@@ -7,7 +7,7 @@ import {
 import type { HistoryEntry } from '../core/history.ts';
 import { chromeMajor, userAgent } from '../core/identity.ts';
 import {
-  addPin, keyOf, movePin, pinKey, pinLabel, pinTarget, rememberShown, removePin, withFavicon, type Pin,
+  addPin, forgetUnpinned, keyOf, movePin, pinKey, pinLabel, pinTarget, rememberShown, removePin, withFavicon, type Pin,
 } from '../core/pins.ts';
 import { mergeProfiles, profileLabel, setDisplayName, withDisplayNames } from '../core/profiles.ts';
 import { createStore } from '../core/store.ts';
@@ -71,7 +71,7 @@ function start(): void {
   let win: BrowserWindow | null = null;
   let downloads: DownloadState[] = [];
   /** Each pin's remembered tab (by pin key): the tab last shown on the pin's host in its profile. This run only. */
-  let remembered = new Map<string, number>();
+  let remembered: ReadonlyMap<string, number> = new Map();
   /** Set once the UI exists; downloads only start from pages, after that. */
   let pushState = (): void => {};
 
@@ -163,17 +163,22 @@ function start(): void {
         state.activeProfile = activeProfile;
         store.save(state);
       }
-      // A pin follows its host: the shown tab on a pinned host becomes that pin's tab, and lends it its favicon.
-      noteShownTab();
+      // A pin follows its host: the shown tab on a pinned host becomes that pin's tab. Each shown pin's tab (shown
+      // or not) lends the pin its favicon, so a background Gmail's unread badge reaches its tile.
       const snap = tabs.snapshot();
-      const key = snap.dir ? pinKey(snap.dir, snap.url) : null;
-      const favicon = snap.tabs.find((t) => t.id === snap.activeTabId)?.favicon ?? null;
-      const pins = key === null ? state.pins : withFavicon(state.pins, key, favicon);
+      noteShownTab(snap);
+      let pins = state.pins;
+      for (const pin of state.pins) {
+        if (!profiles.dirs.has(pin.dir)) continue;
+        const key = keyOf(pin);
+        const t = pinTarget(pin, tabs.tabsOf(pin.dir), remembered.get(key) ?? null);
+        if (t.kind === 'tab') pins = withFavicon(pins, key, tabs.faviconOf(t.id));
+      }
       if (pins !== state.pins) {
         state.pins = pins;
         store.save(state);
       }
-      syncPinTabItem();
+      syncPinTabItem(snap);
       findBar.follow(tabs.activeWebContents()); // switching tab or profile closes the find bar
       pushState();
     }, log, profileName, recorder);
@@ -205,8 +210,8 @@ function start(): void {
 
     // Pinned tabs: saved sites (profile + URL) in the bar. A pin's tab is only ever opened in the pin's own profile,
     // through TabManager; pins of hidden profiles are left out of the bar, the menu and ⌥⌘N.
-    const noteShownTab = (): void => {
-      const snap = tabs.snapshot();
+    type Snapshot = ReturnType<TabManager['snapshot']>;
+    const noteShownTab = (snap: Snapshot = tabs.snapshot()): void => {
       remembered = rememberShown(remembered, state.pins, { dir: snap.dir, tabId: snap.activeTabId, url: snap.url });
     };
     const isPinned = (pin: Pin): boolean => {
@@ -214,21 +219,20 @@ function start(): void {
       return key !== null && state.pins.some((p) => keyOf(p) === key);
     };
     /** What pinning the shown profile's tab `id` would save; null if the shown profile has no such tab. */
-    const pinOfTab = (id: number | null): Pin | null => {
-      const snap = tabs.snapshot();
+    const pinOfTab = (id: number | null, snap: Snapshot = tabs.snapshot()): Pin | null => {
       const tab = snap.tabs.find((t) => t.id === id);
       return tab && snap.dir ? { dir: snap.dir, url: tab.url, title: tab.title, favicon: tab.favicon } : null;
     };
     /** The Tab menu's "Pinned to Bar" checkbox for the main window's active tab. */
-    const activeTabPinState = (): { canPin: boolean; pinned: boolean } => {
-      const pin = pinOfTab(tabs.snapshot().activeTabId);
+    const activeTabPinState = (snap: Snapshot = tabs.snapshot()): { canPin: boolean; pinned: boolean } => {
+      const pin = pinOfTab(snap.activeTabId, snap);
       return { canPin: pin !== null && pinKey(pin.dir, pin.url) !== null, pinned: pin !== null && isPinned(pin) };
     };
     /** Electron flips the checkbox on click, and the active tab changes without a menu rebuild: set it from the pins. */
-    const syncPinTabItem = (): void => {
+    const syncPinTabItem = (snap?: Snapshot): void => {
       const item = Menu.getApplicationMenu()?.getMenuItemById('pinTab');
       if (!item) return;
-      const { canPin, pinned } = activeTabPinState();
+      const { canPin, pinned } = activeTabPinState(snap);
       item.checked = pinned;
       item.enabled = canPin;
     };
@@ -236,6 +240,7 @@ function start(): void {
     const shownPins = () => barPins(state.pins, profiles.visible, state.displayNames, tabs.snapshot());
     const pinsChanged = (): void => {
       store.save(state);
+      remembered = forgetUnpinned(remembered, state.pins);
       noteShownTab(); // a tab pinned while shown is that pin's tab from now on
       rebuildMenu();
       pushState();

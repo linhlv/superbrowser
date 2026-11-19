@@ -177,6 +177,11 @@ export class TabManager {
     return (this.profiles.get(dir)?.tabs ?? []).map((t) => ({ id: t.id, url: t.url }));
   }
 
+  /** The tab's current favicon (null until its page reports one, or if it has no view yet). */
+  faviconOf(id: number): string | null {
+    return this.live.get(id)?.favicon ?? null;
+  }
+
   /**
    * Shows `dir` with its tab `id` active in one switch (a pin click from another profile). A tab not loaded yet
    * gets its view now; a loaded one is only made visible, never reloaded.

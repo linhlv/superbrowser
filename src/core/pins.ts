@@ -90,6 +90,13 @@ export function rememberShown(
   return out;
 }
 
+/** Drops remembered tabs of keys no longer pinned (same map when nothing goes). */
+export function forgetUnpinned(remembered: ReadonlyMap<string, number>, pins: Pin[]): ReadonlyMap<string, number> {
+  const keys = new Set(pins.map(keyOf));
+  if ([...remembered.keys()].every((k) => keys.has(k))) return remembered;
+  return new Map([...remembered].filter(([k]) => keys.has(k)));
+}
+
 export function withFavicon(pins: Pin[], key: string, favicon: string | null): Pin[] {
   if (favicon === null) return pins;
   const i = pins.findIndex((p) => keyOf(p) === key);

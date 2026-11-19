@@ -114,8 +114,8 @@ body.collapsed #side { display: none; }
 #addprofile:hover { background: rgba(255,255,255,.15); }
 /* Pills keep their size: hover changes only the background, so no pill moves under the pointer. The full name and ⌃N
    are in the native tooltip. The vertical stretch and side padding leave room for the focus ring (the row scrolls,
-   so it clips). When pills and pins (#pins) don't both fit, each group shrinks in proportion to its width and scrolls
-   on its own, but keeps at least one item in view: its min-width is one pill or tile plus the 2 × 4 px padding. */
+   so it clips). When pills and pins (#pins) don't both fit, the pins shrink first; each group scrolls on its own and
+   keeps at least one item in view: its min-width is one pill or tile plus the 2 × 4 px padding. */
 #profiles {
   display: flex; gap: 6px; align-items: center; align-self: stretch; padding: 0 4px; overflow-x: auto; scrollbar-width: none;
   flex: 0 1 auto; min-width: 42px;
@@ -151,10 +151,11 @@ body.pf-dragging, body.pf-dragging * { cursor: grabbing; }
 @media (prefers-reduced-motion: reduce) { #profiles.dragging .pf:not(.dragging) { transition: none; } }
 
 /* Pinned tabs, pushed to the bar's right edge (the empty middle stays a drag region). Like #profiles, the row scrolls,
-   so it stretches and pads to leave room for the focus ring. */
+   so it stretches and pads to leave room for the focus ring. When the bar is short of width the pins give it up first
+   (the pills are the main way around), down to one tile; only then do the pills shrink. */
 #pins {
   margin-left: auto; display: flex; gap: 6px; align-items: center; align-self: stretch; padding: 0 4px;
-  overflow-x: auto; scrollbar-width: none; flex: 0 1 auto; min-width: 38px;
+  overflow-x: auto; scrollbar-width: none; flex: 0 1000 auto; min-width: 38px;
 }
 #pins:empty { display: none; }
 /* A tile keeps its size: hover changes only the background. The site's favicon, with the profile's colour as a dot at
