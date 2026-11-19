@@ -68,3 +68,8 @@ test('decodeState: displayNames keeps non-empty strings, normalized', () => {
   assert.deepEqual(s.displayNames, { Default: 'ACME' });
   assert.deepEqual(decodeState({ displayNames: 'bad' }).displayNames, {});
 });
+
+test('decodeState: pins decode tolerantly', () => {
+  assert.deepEqual(decodeState({ pins: [{ dir: 'A', url: 'https://a.com' }] }).pins, [{ dir: 'A', url: 'https://a.com', title: '', favicon: null }]);
+  assert.deepEqual(decodeState({ pins: 7 }).pins, []);
+});

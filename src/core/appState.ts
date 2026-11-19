@@ -1,5 +1,7 @@
 import type { Profile, Section } from '../shared/types.ts';
 import { SECTIONS, isSection } from './sections.ts';
+import { decodePins } from './pins.ts';
+import type { Pin } from './pins.ts';
 import { normalizeDisplayName } from './profiles.ts';
 
 export type Decision = 'allow' | 'deny';
@@ -19,6 +21,7 @@ export type AppState = {
   permissions: Record<string, Record<string, Record<string, Decision>>>;
   firstRunDone: boolean;
   displayNames: Record<string, string>;
+  pins: Pin[];
 };
 
 export function defaultState(): AppState {
@@ -36,6 +39,7 @@ export function defaultState(): AppState {
     permissions: {},
     firstRunDone: false,
     displayNames: {},
+    pins: [],
   };
 }
 
@@ -136,5 +140,6 @@ export function decodeState(raw: unknown): AppState {
     permissions: decodePermissions(raw['permissions']),
     firstRunDone: bool(raw['firstRunDone'], d.firstRunDone),
     displayNames: decodeDisplayNames(raw['displayNames']),
+    pins: decodePins(raw['pins']),
   };
 }
