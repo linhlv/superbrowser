@@ -47,13 +47,15 @@ body.collapsed #side { display: none; }
 .tab .x:hover { background: rgba(127,127,127,.3); opacity: 1; }
 #newtab { padding: 7px 8px; border-radius: 8px; opacity: .75; white-space: pre; }
 #newtab:hover { background: rgba(255,255,255,.1); opacity: 1; }
-/* With a section open, the tabs take what they need up to half the column, then scroll. */
-#side:has(.sec.open) #tabs { flex: 0 1 auto; max-height: 50%; }
+/* With a section open, the tabs take what they need up to half the column, then scroll, but always keep about two
+   rows. Floors and caps fit the 500 px minimum window (408 px column): address 32 + 12 + tabs 64, two open sections
+   2 × (8 + 88), Downloads 8 + 20% (82) = 390, so nothing spills onto the profile bar. */
+#side:has(.sec.open) #tabs { flex: 0 1 auto; max-height: 50%; min-height: 64px; }
 
 /* Bookmarks and History sections under the tabs: a folded one is just its header; open ones share the free height
    and their lists scroll inside them. */
 .sec { flex: none; display: flex; flex-direction: column; margin-top: 8px; }
-.sec.open { flex: 1 1 0; min-height: 120px; }
+.sec.open { flex: 1 1 0; min-height: 88px; }
 .sec-h {
   display: flex; align-items: center; gap: 4px; width: 100%; padding: 4px 8px; border: 0; border-radius: 6px; background: none;
   text-align: left; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; opacity: .75;
@@ -85,6 +87,7 @@ body.collapsed #side { display: none; }
 /* Downloads: newest first, under the tabs; only while the list has something */
 #downloads { flex: none; max-height: 35%; display: flex; flex-direction: column; margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,.15); }
 #downloads[hidden] { display: none; }
+#side:has(.sec.open) #downloads { max-height: 20%; }
 .dl-h { font-size: 11px; font-weight: 600; opacity: .6; padding: 0 8px 4px; text-transform: uppercase; letter-spacing: .04em; }
 #dllist { overflow-y: auto; scrollbar-width: thin; }
 .dl { padding: 5px 8px; border-radius: 8px; }
