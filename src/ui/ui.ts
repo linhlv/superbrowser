@@ -1,6 +1,7 @@
 import type { SuperbrowserApi } from '../preload/ui.ts';
 import { setupSuggestions } from './parts/suggestions.ts';
 import { setupPanel } from './parts/panel.ts';
+import { setupProfileDrag } from './parts/profileDrag.ts';
 import { el, faviconIcon, isImageUrl } from './parts/dom.ts';
 import type { DownloadState, UiState, UiTab } from '../shared/types.ts';
 
@@ -85,6 +86,8 @@ function renderTabs(s: UiState): void {
 
 // Profile pills are rebuilt only when the list itself changes, so a hovered pill doesn't collapse on every push.
 let profilesKey = '';
+// Drag a pill to reorder; the click that ends a drag doesn't switch profile.
+const profileDrag = setupProfileDrag({ bar: profileBar, send: (cmd) => sb.send(cmd) });
 
 function initial(name: string): string {
   return (Array.from(name.trim())[0] ?? '?').toUpperCase();
@@ -98,7 +101,10 @@ function createPill(p: UiState['profiles'][number]): HTMLElement {
   dot.style.background = p.color;
   pill.append(dot, el('span', 'n', p.name));
   if (p.shortcut !== null) pill.append(el('span', 'k', `⌃${p.shortcut}`));
-  pill.addEventListener('click', () => sb.send({ type: 'selectProfile', dir: p.dir }));
+  pill.addEventListener('click', () => {
+    if (profileDrag.suppressClick()) return;
+    sb.send({ type: 'selectProfile', dir: p.dir });
+  });
   pill.addEventListener('contextmenu', (e) => {
     e.preventDefault();
     sb.send({ type: 'profileMenu', dir: p.dir });

@@ -83,7 +83,7 @@ macOS uses ⌃1…⌃9 for "Switch to Desktop N" if that is turned on. If it is,
 ## Profiles
 
 - Profiles, names and colours come from Chrome's profile list. A profile deleted in Chrome keeps its Superbrowser data and stays in the bar until you hide it.
-- Right-click a profile's dot for **Move Left**, **Move Right**, **Hide Profile** and **Open in Chrome**. ⌃N follows the bar order.
+- Drag a profile's dot along the bar to reorder it: the others slide apart to show where it lands, and Esc or letting go above the bar cancels. Right-click a profile's dot for **Move Left**, **Move Right**, **Hide Profile** and **Open in Chrome**. ⌃N follows the bar order, which is Superbrowser's own (Chrome's is never changed).
 - **Profiles ▸ Show Hidden Profiles** brings a hidden profile back.
 - **View ▸ Show Profile Names** shows names next to the dots all the time. Otherwise a name and its ⌃N slide out when you hover a dot.
 - **Profiles ▸ Open This Profile in Chrome** opens the shown profile in real Chrome. Use it for anything Superbrowser can't do (see below).
@@ -193,6 +193,7 @@ Walk this list on the installed app after a change that affects it.
 40. ⌘D on a page opens Bookmarks with the new bookmark highlighted at the top. ⌘D again highlights it and adds no duplicate. ⌘D on a new tab page adds nothing. With a popup focused, ⌘Y, ⌥⌘B and ⌘D act on the main window.
 41. With the sidebar hidden (⌘S), ⌘Y and ⌥⌘B show the sidebar first, with the panel open, even if that panel was open when the sidebar was hidden. With the History panel open and the sidebar hidden, switch profile, then show the sidebar: only the first page of history loads, and more loads as you scroll.
 42. With a panel open, ⌃2 empties and refills it with that profile's data and keeps the search text. **History ▸ Clear History…** asks "Clear all history for <profile>?". Cancel keeps it, and Clear empties only that profile's history (another profile's suggestions still work).
+43. Drag the 4th profile's dot to the front: the others slide aside, the drop sticks without a flicker, ⌃1 now shows that profile, and a relaunch keeps the order. A click (even with a slight wobble) still switches profile and right-click still shows Move Left/Right. Esc mid-drag, or letting go above the bar, puts it back. Dragging a dot never moves the window, while dragging the bar's empty space still does. Hide a profile, reorder the others, then show it again: it is back in its old place.
 
 ## Privacy
 
