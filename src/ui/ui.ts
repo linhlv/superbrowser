@@ -2,9 +2,8 @@ import type { SuperbrowserApi } from '../preload/ui.ts';
 import { setupSuggestions } from './parts/suggestions.ts';
 import { setupBookmarksSection } from './parts/bookmarksSection.ts';
 import { setupHistorySection } from './parts/historySection.ts';
-import { setupProfileDrag } from './parts/profileDrag.ts';
+import { setupProfileBar } from './parts/profileBar.ts';
 import { el, faviconIcon, isImageUrl } from './parts/dom.ts';
-import { keyedMoves } from '../core/reorder.ts';
 import type { DownloadState, Section, UiState, UiTab } from '../shared/types.ts';
 
 declare global {
@@ -18,7 +17,6 @@ const backBtn = byId<HTMLButtonElement>('back');
 const forwardBtn = byId<HTMLButtonElement>('forward');
 const reloadBtn = byId<HTMLButtonElement>('reload');
 const tabList = byId('tablist');
-const profileBar = byId('profiles');
 
 let current: UiState | null = null;
 
@@ -73,6 +71,10 @@ sb.onLibrary((r) => {
 sb.onLibraryChanged(() => { bookmarks.onLibraryChanged(); history.onLibraryChanged(); });
 sb.onHistoryRecorded(() => history.onHistoryRecorded());
 sb.onStartRename((id) => bookmarks.startRename(id));
+
+// Profile pills: switch on click, reorder by drag, menu on right-click, display name edited in place.
+const profileBar = setupProfileBar({ bar: byId('profiles'), sb });
+sb.onEditProfileName((dir) => profileBar.startEdit(dir));
 
 backBtn.addEventListener('click', () => sb.send({ type: 'back' }));
 forwardBtn.addEventListener('click', () => sb.send({ type: 'forward' }));
@@ -141,63 +143,6 @@ function renderTabs(s: UiState): void {
   }
 }
 
-// Profile pills are kept by dir and updated in place, like tab rows: a hovered pill keeps its element (and so its
-// expanded look) across pushes, including the push that follows a drop.
-const pills = new Map<string, HTMLElement>();
-let profilesKey = '';
-// Drag a pill to reorder; the click that ends a drag doesn't switch profile.
-const profileDrag = setupProfileDrag({ bar: profileBar, send: (cmd) => sb.send(cmd) });
-
-function initial(name: string): string {
-  return (Array.from(name.trim())[0] ?? '?').toUpperCase();
-}
-
-function createPill(dir: string): HTMLElement {
-  const pill = el('div', 'pf');
-  pill.dataset['dir'] = dir;
-  pill.append(el('span', 'dot'), el('span', 'n'));
-  pill.addEventListener('click', () => {
-    if (profileDrag.suppressClick()) return;
-    sb.send({ type: 'selectProfile', dir: pill.dataset['dir']! });
-  });
-  pill.addEventListener('contextmenu', (e) => {
-    e.preventDefault();
-    sb.send({ type: 'profileMenu', dir: pill.dataset['dir']! });
-  });
-  pills.set(dir, pill);
-  return pill;
-}
-
-function updatePill(pill: HTMLElement, p: UiState['profiles'][number]): void {
-  pill.title = p.shortcut === null ? p.name : `${p.name}  (⌃${p.shortcut})`;
-  const dot = pill.querySelector<HTMLElement>('.dot')!;
-  dot.textContent = initial(p.name);
-  dot.style.background = p.color;
-  pill.querySelector('.n')!.textContent = p.name;
-  let k = pill.querySelector('.k');
-  if (p.shortcut === null) k?.remove();
-  else (k ??= pill.appendChild(el('span', 'k'))).textContent = `⌃${p.shortcut}`;
-}
-
-function renderProfiles(s: UiState): void {
-  const key = JSON.stringify(s.profiles);
-  if (key !== profilesKey) {
-    profilesKey = key;
-    profileDrag.cancel(); // its measurements are stale once a pill changes
-    const dirs = s.profiles.map((p) => p.dir);
-    for (const [dir, pill] of pills) {
-      if (!dirs.includes(dir)) { pill.remove(); pills.delete(dir); }
-    }
-    for (const p of s.profiles) updatePill(pills.get(p.dir) ?? createPill(p.dir), p);
-    const current = Array.from(profileBar.children, (c) => (c as HTMLElement).dataset['dir'] ?? '');
-    const hovered = profileBar.querySelector<HTMLElement>(':scope > .pf:hover')?.dataset['dir'] ?? null;
-    for (const { key: dir, before } of keyedMoves(current, dirs, hovered)) {
-      profileBar.insertBefore(pills.get(dir)!, before === null ? null : pills.get(before)!);
-    }
-  }
-  for (const [dir, pill] of pills) pill.classList.toggle('on', dir === s.activeProfile);
-}
-
 // Download rows are kept by id too; newest first. A click shows the file in Finder.
 const downloadsSection = byId('downloads');
 const downloadList = byId('dllist');
@@ -260,7 +205,7 @@ sb.onState((s) => {
   forwardBtn.disabled = !s.canGoForward;
   reloadBtn.disabled = s.activeTabId === null;
   renderTabs(s);
-  renderProfiles(s);
+  profileBar.render(s);
   renderDownloads(s.downloads);
   if (!sectionsSettled) {
     sectionsSettled = true;

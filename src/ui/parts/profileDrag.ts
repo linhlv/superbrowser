@@ -67,7 +67,7 @@ export function setupProfileDrag(opts: { bar: HTMLElement; send: (cmd: ReorderCo
     try { p.pill.setPointerCapture(p.pointerId); } catch { press = null; return; }
     p.dragged = true;
     suppress = true;
-    // Classes first: they freeze every pill's look (the dragged one stays expanded, the others ignore hover),
+    // Classes first: they freeze every pill's look (the dragged one keeps its hover look, the others ignore hover),
     // so the rects measured below are the ones that hold for the whole drag.
     bar.classList.add('dragging');
     p.pill.classList.add('dragging');
