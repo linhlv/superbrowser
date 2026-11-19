@@ -1,7 +1,7 @@
 # Superbrowser — design
 
 Date: 2026-11-18
-Status: approved 2026-11-18
+Status: superseded 2026-11-19 by 2026-11-19-superbrowser-electron-design.md
 
 ## Intent and why
 

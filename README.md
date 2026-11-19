@@ -1,71 +1,153 @@
 # Superbrowser
 
-A macOS menu-bar app that makes every Chrome profile's windows behave like one window. Managed Chrome windows are stacked in a single frame on one desktop, with a Superbrowser tab bar (one tab per profile, in Chrome's profile colors) and Ctrl+1…9 shortcuts to switch. A small helper extension, loaded unpacked in each profile, tells Superbrowser which window belongs to which profile.
+A macOS browser that shows every Chrome profile in one ordinary window. It has an Arc-style sidebar with the tabs of the current profile and a slim profile bar at the bottom: click a profile's dot or press ⌃1…⌃9 to switch. Each profile has its own isolated storage, so every profile stays signed in to its own accounts at the same time. Profile names, colours and order come from Chrome, and logins can be imported from Chrome so you don't sign in again. Superbrowser is built on Electron (Chromium) and presents itself to sites as Google Chrome.
 
-Requires macOS 14+ and Google Chrome.
+Requires macOS on Apple Silicon, Google Chrome (for profiles and login import), Node 22 and the Command Line Tools (no Xcode).
 
-## Build and install
+## Install
 
 ```
-scripts/build-app.sh            # builds build/Superbrowser.app (ad-hoc signed)
-scripts/build-app.sh --install  # also copies it to ~/Applications/Superbrowser.app
-swift test                      # run the unit tests
+scripts/build-app.sh --install
 ```
 
-## Setup
+This runs the tests, builds `build/Superbrowser-darwin-arm64/Superbrowser.app` (ad-hoc signed), quits a running Superbrowser and replaces `~/Applications/Superbrowser.app`. Without `--install` it only builds. Run it again to update, for example after bumping Electron (`npm install electron@latest`). The browser's user agent follows Electron's Chromium version automatically.
 
-1. Load the helper extension in **each** Chrome profile: open `chrome://extensions`, turn on **Developer mode**, click **Load unpacked**, and choose the `Extension/` folder.
-2. Open Superbrowser (menu-bar icon). The first-run checklist walks through:
-   - Grant **Accessibility** permission.
-   - **Link profiles**: menu → **Link Profiles…** (also in the checklist) so each profile's extension is matched to its tab. Superbrowser opens a short-lived local page (`http://127.0.0.1:47321/claim?nonce=…`) in each unlinked profile; the helper extension trades that one-time code with Superbrowser for the profile's identity and closes the tab. A code works once and expires after 5 minutes (an expired page says so; use **Link Profiles…** again). A profile stays linked once its extension has reported, across restarts.
-   - Assign Chrome to one desktop: right-click Chrome in the Dock → Options → Assign To → This Desktop.
-   - Quit and reopen Chrome so its windows gather on that desktop.
-   - Choose the bar position (left, right, top, bottom).
-3. Reopen the checklist any time from the menu: **Setup Checklist…**
+Superbrowser keeps its data in `~/Library/Application Support/Superbrowser`:
+
+- `state.json` holds tabs, window position, profile order, hidden profiles and saved site permissions.
+- `Partitions/` holds each profile's cookies and storage.
+
+`npm start` (development) uses the same folder.
+
+## First run
+
+1. Superbrowser offers to **import logins from Chrome** for all profiles. Click **Import All**, then **Import** on the short explanation sheet.
+2. macOS asks for the "Chrome Safe Storage" Keychain item. Click **Always Allow**. Superbrowser only reads it.
+3. A summary lists what was imported per profile. Your Google accounts are now signed in, in the right profile each.
+
+You can repeat the import any time from the **Profiles** menu:
+
+- **Import Logins from Chrome**: the shown profile only.
+- **Import Logins for All Profiles**.
+- **Replace Logins from Chrome…**: overwrites the shown profile's logins with Chrome's current ones, after a confirmation.
+
+A normal import only adds logins Superbrowser doesn't have yet. It never signs you out. Superbrowser never writes to Chrome's files or its Keychain item.
 
 ## Shortcuts
 
 | Keys | Action |
 | --- | --- |
-| ⌃1 … ⌃9 | Switch to the Nth visible profile tab |
+| ⌃1 … ⌃9 | Show the Nth profile in the bottom bar |
+| ⌘1 … ⌘8, ⌘9 | Select the Nth tab, or the last tab |
+| ⌘T | New tab (focuses the address field) |
+| ⇧⌘T | Reopen the last closed tab |
+| ⌘L | Focus the address field |
+| ⌘W | Close the tab (never the window) |
+| ⌘S | Hide or show the sidebar |
+| ⌘R | Reload |
+| ⌘[ / ⌘] | Back / Forward |
+| ⌘F, ⌘G, ⇧⌘G | Find in page, next, previous (Esc closes) |
+| ⌘+ (or ⌘=), ⌘−, ⌘0 | Zoom in, out, actual size |
+| ⌃⌘F | Full screen |
+| ⌘P | Print |
+| ⌥⌘I | Developer Tools for the page |
+| ⌘Q, red button | Quit (tabs come back on the next launch) |
 
-The modifier is selectable under **Shortcut Keys**: ⌃, ⌃⌥ or ⌃⌘. macOS "Switch to Desktop N" shortcuts use ⌃1…⌃9 by default; if they clash, the menu shows a warning. Pick another modifier or turn those macOS shortcuts off in System Settings → Keyboard → Keyboard Shortcuts → Mission Control.
+The address field takes a URL or a Google search: `example.com`, `localhost:3000` and `192.168.1.10/admin` open as addresses.
 
-## How switching works
+macOS uses ⌃1…⌃9 for "Switch to Desktop N" if that is turned on. If it is, turn those shortcuts off in System Settings → Keyboard → Keyboard Shortcuts → Mission Control.
 
-Click a tab or press its shortcut. If you are on another desktop, macOS swipes to the browser desktop. The profile's window comes to the front inside the frame. If the profile has several windows, repeated presses cycle through them while Chrome is the active app (the tab shows ×2, etc.); from another app, the shortcut brings back the profile's most recently used window. If it has none, a new window opens.
+## Profiles
 
-Dragging or resizing any managed window moves and resizes the whole frame: the other windows and the bar follow. Maximizing or zooming a window, or dragging it against a screen edge, keeps the bar on screen: the frame is fitted into the screen and the window is placed next to the bar. A window restored from the Dock or from full screen returns into the frame.
+- Profiles, names and colours come from Chrome's profile list. A profile deleted in Chrome keeps its Superbrowser data and stays in the bar until you hide it.
+- Right-click a profile's dot for **Move Left**, **Move Right**, **Hide Profile** and **Open in Chrome**. ⌃N follows the bar order.
+- **Profiles ▸ Show Hidden Profiles** brings a hidden profile back.
+- **View ▸ Show Profile Names** shows names next to the dots all the time. Otherwise a name and its ⌃N slide out when you hover a dot.
+- **Profiles ▸ Open This Profile in Chrome** opens the shown profile in real Chrome. Use it for anything Superbrowser can't do (see below).
 
-Without Accessibility permission, tabs and shortcuts open the Setup Checklist instead of switching.
+Switching profile or tab never reloads a page. After a relaunch, each profile's active tab loads first. Other tabs load when you first show them.
 
-Menu items: **Bar Position**, **Profiles** (show/hide, reorder, fallback), **Shortcut Keys**, **Launch at Login** (installed app only).
+Sites ask before using the camera, microphone, screen sharing, notifications, location or the clipboard. The answer is per profile and per site. Allow with "Remember for this site" is saved. Block lasts until you quit.
 
 ## Known limits
 
-- Chrome full-screen is not supported.
-- Popups, DevTools, installed web apps (PWAs), picture-in-picture and minimized windows are left alone (a minimized window rejoins the frame when restored).
-- A window already minimized when Superbrowser starts is not adopted until it is restored.
-- Chrome windows on another desktop when Superbrowser starts are picked up when you visit that desktop.
-- A profile that can't run the helper extension (e.g. blocked by policy) can be marked **use fallback** under Profiles. Only one such profile is supported. Its windows can't be identified directly, so it adopts only a window that opens within 10 s after you open or switch to that profile through Superbrowser (its tab or shortcut), and only while every other visible profile is linked. DevTools windows are never adopted. Fallback-profile windows already open when Superbrowser starts are left alone; open one from its tab instead.
-- The app is ad-hoc signed, so Accessibility must be re-granted after each rebuild:
-  `tccutil reset Accessibility dev.superbrowser.app`, then grant again.
+- **No passkeys.** A passkey request fails at once, so sites offer another way. Use password + 2-step code, or import logins from Chrome.
+- **No password autofill.** Copy passwords from the macOS Passwords app.
+- **No Chrome extensions.** Use **Open This Profile in Chrome** for anything that needs one.
+- **claude.ai needs a fresh login.** Its login is tied to the device and doesn't import.
+- **Google may occasionally sign one browser out.** Chrome and Superbrowser share the same Google sessions. If Superbrowser gets signed out, use **Profiles ▸ Replace Logins from Chrome…**.
+- **Links to other apps don't open.** `mailto:`, `zoommtg:` and similar links do nothing. Copy the link, or use Chrome.
+- **blob: documents open in a small popup window,** not a tab. An example is a PDF a web app generates.
+- **No popup blocker.** A page can open windows without a click.
+- **A hidden profile's open tabs keep running.** They are muted while the profile is hidden.
+- Saved site permissions can't be revoked from the app yet. Remove them from `permissions` in `state.json` while Superbrowser is not running.
+- In development (`npm start`) the menu bar says "Electron". The built app says "Superbrowser".
 
 ## Verify it works
 
-1. First launch shows the checklist; complete all five rows; every profile shows linked (except a fallback profile).
-2. Chrome windows of all profiles stack in one frame on the browser desktop; the bar shows one tab per profile in Chrome's profile colors.
-3. Click each tab: that profile's window comes to the front, nothing appears to move; the active tab is highlighted.
-4. From another desktop press ⌃3: macOS swipes to the browser desktop with profile 3 in front.
-5. Profile with no window: click its tab and a new window opens inside the frame.
-6. Profile with two windows: pressing its shortcut twice cycles them; the tab shows ×2.
-7. Drag any Chrome window in the frame: all windows and the bar follow; zoom a window (green button with ⌥): the bar stays on screen; restart Superbrowser and the frame is restored.
-8. Switch bar position through all four sides via the menu: layout is correct each time.
-9. Sign in to a Google service via a popup and use the password manager: the popup is not pulled into the frame; both work normally.
-10. Minimize a window: it stays minimized; clicking its tab restores it in the frame (also after the frame was moved meanwhile).
-11. Quit Chrome: tabs dim; reopen it and the windows are re-adopted.
-12. Hide a profile: its tab disappears, its windows are left alone, and shortcuts renumber.
+Walk this list on the installed app after a change that affects it.
+
+**Window and profiles**
+
+1. The window opens on the first visible profile. The page has rounded corners inset 8 px from the window edge, and the sidebar is on the left. There is no white flash at startup.
+2. ⌃2 shows another profile. ⌃1 returns to the first page without a reload, and the scroll position is kept. The window tint changes to the profile's colour.
+3. Sign in to a site in one profile. Another profile is still signed out there.
+4. Hovering a dot slides out the profile's name and ⌃N. Clicking a dot switches profile.
+5. Move and resize the window, quit, and relaunch. The same profile, tabs and window position come back.
+6. The menu bar and the Dock say "Superbrowser" and show its icon.
+
+**Sidebar and tabs**
+
+7. Clicking a tab, **+ New Tab**, ×, Back, Forward and Reload all work. Typing `example.com` + Enter in the address field opens it.
+8. ◧ or ⌘S hides the sidebar. The page fills the width, the window buttons disappear, and the bottom bar still switches profiles. Showing the sidebar brings the buttons back at the same place.
+9. The window can be dragged by the bottom bar, the top 40 px of the sidebar and the 8 px gap above the page. Clicking near the top of a page (for example Google's account avatar) clicks the page and doesn't drag the window. Favicons appear for loaded tabs.
+
+**Shortcuts and find**
+
+10. Every shortcut in the table works:
+    - with the sidebar shown and with it hidden;
+    - with focus in the page, in the address field and in the find bar.
+11. ⌘W never closes the window, even on the last tab.
+12. ⌘F shows a white rounded bar at the top right of the page, with its field focused. Typing highlights matches and shows a "2/7"-style count, which is red at 0/0. Enter and ⇧Enter step through matches. Esc closes the bar, clears the highlights and lets you type into the page. Switching tab or profile closes the bar.
+13. ⌘P shows the print dialog. ⌥⌘I opens detached DevTools for the page, and pressing it again closes them.
+
+**Profile management**
+
+14. **Move Right** on a dot changes the bar order and the ⌃N mapping.
+15. **Hide Profile** removes the profile from the bar, and **Show Hidden Profiles** brings it back. Hiding the active profile switches to the first visible one. Hide is disabled when only one profile is visible.
+16. Play audio in a profile and hide it: the audio goes silent. Unhide it: the sound returns.
+17. **Open This Profile in Chrome** and the dot's **Open in Chrome** open Chrome on the right profile.
+18. Quit and relaunch. The order, hidden profiles and Show Profile Names survive.
+
+**Login import** (to test the first run: quit, then remove `state.json` and `Partitions/` from the data folder)
+
+19. The first-run sheet appears over the window. Choose **Import All**. The explanation sheet appears, then the macOS Keychain prompt for "Chrome Safe Storage" (Always Allow), then one summary listing every visible profile.
+20. Gmail opens signed in on each imported profile without logging in. Chrome is still signed in.
+21. **Import Logins from Chrome** again reports 0 new logins, with the rest skipped.
+22. Clicking Deny at the Keychain prompt shows an error sheet, and nothing changes.
+23. **Replace Logins from Chrome…** asks for confirmation, re-imports, and reloads that profile's loaded tabs.
+
+**Site permissions**
+
+24. Google Meet → "Check your audio and video": one sheet asks for the camera and microphone. After Allow, macOS asks once for camera and microphone access for Superbrowser. Video and sound work, and after a relaunch Meet doesn't ask again.
+25. Meet → Present now: the macOS screen picker appears.
+26. Gmail's desktop notifications prompt appears as a sheet. After Allow, a notification appears.
+27. Google sign-in on an account with a passkey: the passkey step offers other options at once instead of hanging.
+28. A request from a profile that isn't shown names that profile in the sheet ("Profile: …").
+
+**Pages, popups and downloads**
+
+29. ⌘-click a link: a background tab opens right after the current one. ⇧-click: a foreground tab.
+30. "Sign in with Google" on a third-party site opens a small window that is already signed in to the same profile's Google account. It completes the sign-in and closes itself.
+31. Right-click menus:
+    - A link: Open Link in New Tab, Copy Link Address.
+    - An image: Copy Image, and Save Image As…, which saves to Downloads.
+    - Selected text: Copy, Search Google for "…".
+    - A text field: Cut, Copy, Paste, Select All.
+    - Inspect opens DevTools at the element.
+32. Download a PDF twice. Both appear in the sidebar's Downloads list, and `~/Downloads` has `x.pdf` and `x (1).pdf`. A "Downloaded x.pdf" notification appears. Clicking a row shows the file in Finder.
+33. YouTube full screen: the video fills the window and the window goes full screen. Esc restores the sidebar and bar. If the window was already full screen before, it stays full screen. ⌃2 during a full-screen video ends it.
 
 ## Privacy
 
-The extension sends only window ids, bounds and state to `127.0.0.1:47321`. Nothing leaves your Mac, and Superbrowser never writes Chrome's data.
+Superbrowser talks only to the sites you open. It reads Chrome's profile list and, when you import, a copy of a profile's cookie database and the "Chrome Safe Storage" Keychain item. It never writes to Chrome's data.

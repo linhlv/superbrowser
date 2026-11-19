@@ -440,3 +440,30 @@ export function popupWindowOptions(dir: string): { width: number; height: number
 - [ ] **Step 4: Rewrite README and CLAUDE.md; update the old spec's status line.**
 - [ ] **Step 5: Walk the README's "Verify it works" checklist on the installed app** and fix anything that fails.
 - [ ] **Step 6: Commit** — `chore: package Superbrowser.app, retire the Swift app and extension, rewrite docs`
+
+---
+
+## Deviations during execution
+
+- **App icon (R4):** the icon comes from the user's `resources/Superbrowser.png`. `scripts/make-icon.sh` resizes it with `sips` into an iconset and runs `iconutil`, producing `resources/icon.icns`. There is no `resources/icon.svg` and no `qlmanage` step.
+- **No `--install` during the build task (R7):** Task 10 built and checked the bundle in `build/` only, because installing would replace `~/Applications/Superbrowser.app` and quit the running v1. Installing waits for the user's OK. `scripts/build-app.sh --install` still does it.
+- **Packaging details:**
+  - `productName: "Superbrowser"` is in package.json and in the staged package.json, so `npm start` and the app share `~/Library/Application Support/Superbrowser`.
+  - The packager gets `--electron-version` explicitly, because the staged package.json has no electron dependency.
+  - Info.plist gets `NSCameraUsageDescription` and `NSMicrophoneUsageDescription`, which Meet needs.
+- **Extra modules beyond the file map:**
+  - `src/core/uiProtocol.ts`: UI command validation and bar profiles.
+  - `src/main/profileManager.ts`: profile order, hide/unhide and the dot menu. It was moved out of `main.ts` before the import work (R5).
+  - `src/main/importFlow.ts`: the import sheets and import lock, separate from `importer.ts`.
+  - `src/main/pages.ts`: new-window handling, popups and the context menu.
+  - `src/main/downloads.ts`: download tracking. `src/core/downloads.ts` has the pure parts.
+  - Also `src/ui/find.css` (the CSP forbids inline styles).
+- **Import menu items (R1):** Task 7 added the import items to the Profiles menu, not Task 6.
+- **Only Allow is persisted (R6):** a Block, remembered or not, lasts only for the app run. The default stays Block, and a site can always ask again after a relaunch.
+- **Permission prompts are tied to their tab:**
+  - At most one pending prompt per tab. Further requests from that tab are refused.
+  - A prompt from a page that navigated or closed is dropped without a sheet.
+- **blob: URLs open as popups** in the opener's profile (`windowOpenTarget`). This survives the page revoking the URL right after `window.open`. A context-menu "Open Link in New Tab" on a blob: link opens a tab.
+- **`nodeIntegrationInSubFrames: true` on page views** (`PAGE_WEB_PREFERENCES`), so the per-session frame preload (passkey fail-fast) also runs in iframes. Page views stay sandboxed with context isolation, and the preload exposes nothing to pages.
+- **Hidden profiles are muted (R5):** a hidden profile's live tab views keep running but are muted until the profile is shown again.
+- **Tests sit next to sources** (`src/**/*.test.ts`), not in `test/`, which would collide with v1's `Tests/` on the case-insensitive disk.
