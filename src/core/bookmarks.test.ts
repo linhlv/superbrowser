@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   TOP_LEVEL, emptyTree, decodeTree, findNode, findByUrl, addBookmark, addFolder,
-  renameNode, moveNode, removeNode, folderChoices, flattenBookmarks, mergeChrome,
+  renameNode, moveNode, removeNode, folderChoices, flattenBookmarks, mergeChrome, ancestorFolders, searchBookmarks,
 } from './bookmarks.ts';
 import type { ChromeBookmarks, ChromeNode } from './chromeLibrary.ts';
 
@@ -95,6 +95,24 @@ test('flattenBookmarks gives every bookmark with its folder path', () => {
   assert.equal(flat.find((b) => b.title === 'Weekly')!.path, 'Daily / Reports');
   assert.equal(flat.find((b) => b.title === 'Gmail')!.path, 'Daily');
   assert.equal(flat.find((b) => b.title === 'Figma')!.path, '');
+});
+
+test('ancestorFolders lists the folders around a node, outermost first', () => {
+  const { t, daily, reports } = sample();
+  assert.deepEqual(ancestorFolders(t.nodes, findByUrl(t, 'https://r.test/w')!.id), [daily, reports]);
+  assert.deepEqual(ancestorFolders(t.nodes, reports), [daily]);
+  assert.deepEqual(ancestorFolders(t.nodes, findByUrl(t, 'https://figma.com/')!.id), []);
+  assert.equal(ancestorFolders(t.nodes, 999), null);
+});
+
+test('searchBookmarks matches every word in title or URL, ignoring case and diacritics', () => {
+  const { t } = sample();
+  let tree = addBookmark(t, { title: 'Hồ sơ khách hàng', url: 'https://crm.test/' }, T0).tree;
+  tree = addBookmark(tree, { title: 'Other', url: 'https://other.test/' }, T0).tree;
+  assert.deepEqual(searchBookmarks(tree.nodes, 'ho SO').map((b) => b.title), ['Hồ sơ khách hàng']);
+  assert.deepEqual(searchBookmarks(tree.nodes, 'r.test weekly').map((b) => [b.title, b.path]), [['Weekly', 'Daily / Reports']]);
+  assert.deepEqual(searchBookmarks(tree.nodes, 'mail figma'), []);
+  assert.equal(searchBookmarks(tree.nodes, '  ').length, 5, 'no words: everything');
 });
 
 test('a folder with an empty title is "Untitled" in folder paths', () => {

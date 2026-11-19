@@ -1,5 +1,6 @@
 import type { SuperbrowserApi } from '../preload/ui.ts';
 import { setupSuggestions } from './parts/suggestions.ts';
+import { setupPanel } from './parts/panel.ts';
 import type { DownloadState, UiState, UiTab } from '../shared/types.ts';
 
 declare global {
@@ -30,7 +31,8 @@ address.addEventListener('mousedown', (e) => {
 });
 address.addEventListener('focus', () => address.select());
 const suggestions = setupSuggestions({ address, list: byId('suggest'), sb, currentUrl: () => current?.url ?? '' });
-sb.onLibrary((r) => { if (r.kind === 'suggestions') suggestions.onReply(r); });
+const panel = setupPanel({ sb, root: byId('panel'), tabs: byId('tabs') });
+sb.onLibrary((r) => { if (r.kind === 'suggestions') suggestions.onReply(r); else panel.onReply(r); });
 sb.onFocusAddress(() => { address.focus(); address.select(); });
 
 backBtn.addEventListener('click', () => sb.send({ type: 'back' }));
@@ -178,7 +180,10 @@ function renderDownloads(list: DownloadState[]): void {
 
 sb.onState((s) => {
   const first = current === null;
-  if (current !== null && current.activeProfile !== s.activeProfile) suggestions.close();
+  if (current !== null && current.activeProfile !== s.activeProfile) {
+    suggestions.close();
+    panel.onProfileChanged(s.activeProfile);
+  }
   current = s;
   document.body.classList.toggle('collapsed', !s.sidebarVisible);
   document.body.classList.toggle('names', s.showNames);

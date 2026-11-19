@@ -19,3 +19,10 @@ export function matchesAll(key: string, words: string[]): boolean {
 export function dayOf(timeMs: number, tzOffsetMin: number): number {
   return Math.floor((timeMs - tzOffsetMin * 60_000) / DAY_MS);
 }
+
+/** A history day header: "Today", "Yesterday", or `format` given a time at that local day's noon. */
+export function dayLabel(day: number, today: number, tzOffsetMin: number, format: (timeMs: number) => string): string {
+  if (day === today) return 'Today';
+  if (day === today - 1) return 'Yesterday';
+  return format(day * DAY_MS + tzOffsetMin * 60_000 + DAY_MS / 2);
+}

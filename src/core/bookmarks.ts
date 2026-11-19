@@ -1,5 +1,6 @@
 import type { BookmarkNode } from '../shared/types.ts';
 import { isWebUrl } from './address.ts';
+import { matchesAll, searchKey, splitWords } from './searchText.ts';
 import type { ChromeBookmarks, ChromeNode } from './chromeLibrary.ts';
 
 export type BookmarkTree = { version: 1; nextId: number; nodes: BookmarkNode[] }; // nodes = top level
@@ -161,6 +162,24 @@ export function flattenBookmarks(nodes: BookmarkNode[]): { id: number; title: st
   };
   walk(nodes, '');
   return out;
+}
+
+/** Bookmarks whose title or URL has every word of `query` (no words: all), each with its folder path. */
+export function searchBookmarks(nodes: BookmarkNode[], query: string): { id: number; title: string; url: string; path: string }[] {
+  const words = splitWords(query);
+  return flattenBookmarks(nodes).filter((b) => matchesAll(searchKey(`${b.title} ${b.url}`), words));
+}
+
+/** The ids of the folders holding node `id`, outermost first ([] at the top level); null if it isn't in the tree. */
+export function ancestorFolders(nodes: BookmarkNode[], id: number): number[] | null {
+  for (const n of nodes) {
+    if (n.id === id) return [];
+    if (n.kind === 'folder') {
+      const inner = ancestorFolders(n.children, id);
+      if (inner) return [n.id, ...inner];
+    }
+  }
+  return null;
 }
 
 /**
