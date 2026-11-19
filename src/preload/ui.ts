@@ -20,6 +20,8 @@ export type SuperbrowserApi = {
   onPanel(cb: (request: PanelRequest) => void): void;
   /** Edit this bookmark's or folder's name inline (Rename…, New Folder…). */
   onStartRename(cb: (id: number) => void): void;
+  /** Edit this profile's display name inline (the dot menu's Set Display Name…). */
+  onEditProfileName(cb: (dir: string) => void): void;
   send(cmd: UiCommand): void;
 };
 
@@ -33,6 +35,7 @@ const api: SuperbrowserApi = {
   onHistoryRecorded: (cb) => { ipcRenderer.on(IPC.historyRecorded, () => cb()); },
   onPanel: (cb) => { ipcRenderer.on(IPC.panel, (_e, request: PanelRequest) => cb(request)); },
   onStartRename: (cb) => { ipcRenderer.on(IPC.startRename, (_e, id: number) => cb(id)); },
+  onEditProfileName: (cb) => { ipcRenderer.on(IPC.editProfileName, (_e, dir: string) => cb(dir)); },
   send: (cmd) => ipcRenderer.send(IPC.command, cmd),
 };
 

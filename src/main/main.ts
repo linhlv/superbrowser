@@ -6,7 +6,7 @@ import {
 } from '../core/bookmarks.ts';
 import type { HistoryEntry } from '../core/history.ts';
 import { chromeMajor, userAgent } from '../core/identity.ts';
-import { mergeProfiles } from '../core/profiles.ts';
+import { mergeProfiles, profileLabel, setDisplayName, withDisplayNames } from '../core/profiles.ts';
 import { createStore } from '../core/store.ts';
 import { sameSavedTabs } from '../core/tabs.ts';
 import { downloadsOf } from '../core/downloads.ts';
@@ -87,7 +87,10 @@ function start(): void {
   app.on('window-all-closed', () => app.quit());
   setInterval(() => library.pruneAll(), HISTORY_PRUNE_INTERVAL_MS).unref();
 
-  const profileName = (dir: string): string => state.knownProfiles.find((p) => p.dir === dir)?.name ?? dir;
+  const profileName = (dir: string): string => {
+    const found = state.knownProfiles.find((p) => p.dir === dir);
+    return found ? profileLabel(found, state.displayNames) : dir;
+  };
 
   void app.whenReady().then(() => {
     configureSessions({
@@ -164,6 +167,11 @@ function start(): void {
       window,
       log,
       rebuildMenu: () => rebuildMenu(),
+      editDisplayName: (dir) => {
+        window.focus();
+        ui.webContents.focus();
+        toUi(IPC.editProfileName, dir);
+      },
       saveAndPush: () => {
         store.save(state);
         pushState();
@@ -172,8 +180,8 @@ function start(): void {
     const imports = new ImportFlow({
       window,
       log,
-      activeProfile: () => profiles.visible.find((p) => p.dir === tabs.snapshot().dir) ?? null,
-      visibleProfiles: () => profiles.visible,
+      activeProfile: () => withDisplayNames(profiles.visible, state.displayNames).find((p) => p.dir === tabs.snapshot().dir) ?? null,
+      visibleProfiles: () => withDisplayNames(profiles.visible, state.displayNames),
       reloadProfile: (dir) => tabs.reloadProfile(dir),
       library,
       libraryChanged,
@@ -449,8 +457,8 @@ function start(): void {
     const rebuildMenu = (): void => {
       Menu.setApplicationMenu(buildMenu({
         ...menuActions,
-        profiles: profiles.visible,
-        hiddenProfiles: profiles.hidden,
+        profiles: withDisplayNames(profiles.visible, state.displayNames),
+        hiddenProfiles: withDisplayNames(profiles.hidden, state.displayNames),
         showNames: state.showNames,
       }));
     };
@@ -497,6 +505,12 @@ function start(): void {
           break;
         case 'historyMenu': showHistoryMenu(cmd.url); break;
         case 'bookmarkMenu': showBookmarkMenu(cmd.id); break;
+        case 'setDisplayName':
+          state.displayNames = setDisplayName(state.displayNames, cmd.dir, cmd.name);
+          store.save(state);
+          rebuildMenu();
+          pushState();
+          break;
         case 'renameBookmark': renameBookmark(cmd.id, cmd.title); break;
         case 'setSectionOpen':
           state.openSections = withSection(state.openSections, cmd.section, cmd.open);

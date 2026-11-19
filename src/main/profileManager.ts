@@ -13,6 +13,8 @@ export type ProfileManagerDeps = {
   log: (msg: string) => void;
   /** The visible or hidden profiles changed: rebuild the application menu (⌃N, Show Hidden Profiles). */
   rebuildMenu(): void;
+  /** Ask the UI to edit this profile's display name inline. */
+  editDisplayName(dir: string): void;
   saveAndPush(): void;
 };
 
@@ -65,6 +67,7 @@ export class ProfileManager {
         const next = order(step);
         if (next) { state.profileOrder = next; this.changed(); }
       },
+      setDisplayName: () => this.deps.editDisplayName(dir),
       hide: () => {
         const next = hidden();
         if (next) { state.hiddenProfiles = next; this.changed(); }

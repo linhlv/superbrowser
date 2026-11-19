@@ -183,6 +183,7 @@ export type ProfileMenuContext = {
   canHide: boolean; // false for the last visible profile
   move(step: -1 | 1): void;
   hide(): void;
+  setDisplayName(): void;
   openInChrome(): void;
 };
 
@@ -190,6 +191,8 @@ export function buildProfileMenu(ctx: ProfileMenuContext): Menu {
   return Menu.buildFromTemplate([
     { label: 'Move Left', enabled: ctx.canMoveLeft, click: () => ctx.move(-1) },
     { label: 'Move Right', enabled: ctx.canMoveRight, click: () => ctx.move(1) },
+    { type: 'separator' },
+    { label: 'Set Display Name…', click: () => ctx.setDisplayName() },
     { type: 'separator' },
     { label: 'Hide Profile', enabled: ctx.canHide, click: () => ctx.hide() },
     { type: 'separator' },
