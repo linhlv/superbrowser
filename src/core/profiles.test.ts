@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { argbToHex, parseLocalState, mergeProfiles, arrangeProfiles, moveProfile, placeProfile, hideProfile, hidesEveryProfile } from './profiles.ts';
+import { argbToHex, parseLocalState, mergeProfiles, arrangeProfiles, moveProfile, placeProfile, hideProfile, hidesEveryProfile, initials, normalizeDisplayName, setDisplayName, profileLabel, withDisplayNames } from './profiles.ts';
 import type { Profile } from '../shared/types.ts';
 
 const p = (dir: string, name = dir, color = '#808080'): Profile => ({ dir, name, color });
@@ -147,4 +147,31 @@ test('placeProfile returns null when nothing changes or the move is invalid', ()
   assert.equal(placeProfile(all, [], ['C'], 'C', 'A'), null);   // hidden dir
   assert.equal(placeProfile(all, [], ['C'], 'A', 'C'), null);   // hidden before
   assert.equal(placeProfile(all, [], [], 'Z', 'A'), null);      // unknown
+});
+
+test('initials: two words give two first letters, one word its first two', () => {
+  assert.equal(initials('Client X'), 'CX');
+  assert.equal(initials('ACME'), 'AC');
+  assert.equal(initials('Me'), 'ME');
+  assert.equal(initials('a'), 'A');
+  assert.equal(initials('  '), '?');
+  assert.equal(initials('😀 Team'), '😀T');      // whole code points
+  assert.equal(initials('😀'), '😀');
+});
+test('normalizeDisplayName: trims, collapses spaces, cuts to 40 code points', () => {
+  assert.equal(normalizeDisplayName('  ACME   Corp '), 'ACME Corp');
+  assert.equal(normalizeDisplayName('   '), '');
+  assert.equal(normalizeDisplayName('x'.repeat(200)).length, 40);
+  assert.equal(Array.from(normalizeDisplayName('😀'.repeat(50))).length, 40);
+});
+test('setDisplayName: sets, and clears on empty', () => {
+  assert.deepEqual(setDisplayName({}, 'Default', ' ACME '), { Default: 'ACME' });
+  assert.deepEqual(setDisplayName({ Default: 'ACME' }, 'Default', '  '), {});
+});
+test('profileLabel / withDisplayNames: display name wins, Chrome name otherwise', () => {
+  const p = { dir: 'Default', name: 'Person 1', color: '#123456' };
+  assert.equal(profileLabel(p, {}), 'Person 1');
+  assert.equal(profileLabel(p, { Default: 'ACME' }), 'ACME');
+  assert.equal(profileLabel({ ...p, dir: 'toString' }, {}), 'Person 1');
+  assert.deepEqual(withDisplayNames([p], { Default: 'ACME' }), [{ ...p, name: 'ACME' }]);
 });

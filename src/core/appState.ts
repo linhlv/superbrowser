@@ -1,5 +1,6 @@
 import type { Profile, Section } from '../shared/types.ts';
 import { SECTIONS, isSection } from './sections.ts';
+import { normalizeDisplayName } from './profiles.ts';
 
 export type Decision = 'allow' | 'deny';
 export type SavedTabs = { tabs: { url: string; title: string }[]; activeIndex: number };
@@ -17,6 +18,7 @@ export type AppState = {
   tabs: Record<string, SavedTabs>;
   permissions: Record<string, Record<string, Record<string, Decision>>>;
   firstRunDone: boolean;
+  displayNames: Record<string, string>;
 };
 
 export function defaultState(): AppState {
@@ -33,6 +35,7 @@ export function defaultState(): AppState {
     tabs: {},
     permissions: {},
     firstRunDone: false,
+    displayNames: {},
   };
 }
 
@@ -104,6 +107,17 @@ function decodePermissions(v: unknown): AppState['permissions'] {
   return out;
 }
 
+function decodeDisplayNames(v: unknown): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (!isObj(v)) return out;
+  for (const [dir, name] of Object.entries(v)) {
+    if (typeof name !== 'string') continue;
+    const n = normalizeDisplayName(name);
+    if (n !== '') out[dir] = n;
+  }
+  return out;
+}
+
 /** Tolerant decode: never throws; each bad or missing field falls back to its default. */
 export function decodeState(raw: unknown): AppState {
   const d = defaultState();
@@ -121,5 +135,6 @@ export function decodeState(raw: unknown): AppState {
     tabs: decodeTabs(raw['tabs']),
     permissions: decodePermissions(raw['permissions']),
     firstRunDone: bool(raw['firstRunDone'], d.firstRunDone),
+    displayNames: decodeDisplayNames(raw['displayNames']),
   };
 }

@@ -107,3 +107,38 @@ export function hidesEveryProfile(all: Profile[], hidden: string[]): boolean {
   const hiddenSet = new Set(hidden);
   return all.length > 0 && all.every((x) => hiddenSet.has(x.dir));
 }
+
+export const MAX_DISPLAY_NAME = 40;
+
+/** Trim, collapse inner whitespace to one space, cut to 40 code points, trim again. */
+export function normalizeDisplayName(raw: string): string {
+  const collapsed = raw.trim().replace(/\s+/g, ' ');
+  return Array.from(collapsed).slice(0, MAX_DISPLAY_NAME).join('').trim();
+}
+
+/** A new map with `dir` set to the normalized name, or removed when it normalizes to empty. */
+export function setDisplayName(names: Record<string, string>, dir: string, raw: string): Record<string, string> {
+  const out = { ...names };
+  const name = normalizeDisplayName(raw);
+  if (name === '') delete out[dir];
+  else out[dir] = name;
+  return out;
+}
+
+/** The user's display name for the profile, else Chrome's name. */
+export function profileLabel(p: Profile, names: Record<string, string>): string {
+  const own = Object.prototype.hasOwnProperty.call(names, p.dir) ? names[p.dir] : undefined;
+  return typeof own === 'string' && own !== '' ? own : p.name;
+}
+
+export function withDisplayNames(list: Profile[], names: Record<string, string>): Profile[] {
+  return list.map((p) => ({ ...p, name: profileLabel(p, names) }));
+}
+
+/** Two words give their first letters; one word gives its first two; uppercase; '?' when empty. */
+export function initials(label: string): string {
+  const words = label.trim().split(/\s+/).filter((w) => w !== '');
+  if (words.length === 0) return '?';
+  const chars = words.length >= 2 ? [Array.from(words[0]!)[0]!, Array.from(words[1]!)[0]!] : Array.from(words[0]!).slice(0, 2);
+  return chars.join('').toUpperCase();
+}

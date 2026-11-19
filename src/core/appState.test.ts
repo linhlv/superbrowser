@@ -62,3 +62,9 @@ test('decodeState: openSections is tolerant', () => {
   assert.deepEqual(decodeState({ openSections: ['history', 'history', 'x', 3, 'bookmarks'] }).openSections, ['bookmarks', 'history']);
   assert.equal(decodeState({ openSections: 'bad', showNames: true }).showNames, true);
 });
+
+test('decodeState: displayNames keeps non-empty strings, normalized', () => {
+  const s = decodeState({ displayNames: { Default: '  ACME ', 'Profile 3': 5, 'Profile 4': '   ' } });
+  assert.deepEqual(s.displayNames, { Default: 'ACME' });
+  assert.deepEqual(decodeState({ displayNames: 'bad' }).displayNames, {});
+});
