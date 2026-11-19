@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Build Superbrowser.app (ad-hoc signed). Usage: scripts/build-app.sh [--install]
+# Build Superbrowser.app (Electron, ad-hoc signed). Usage: scripts/build-app.sh [--install]
+# Output: build/Superbrowser-darwin-arm64/Superbrowser.app; --install copies it to ~/Applications.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -12,43 +13,45 @@ case "${1:-}" in
   *) echo "usage: $0 [--install]" >&2; exit 2 ;;
 esac
 
-APP="$ROOT/build/Superbrowser.app"
+[ -d node_modules ] || npm ci
+npm test
+rm -rf dist
+npm run build
 
-swift build -c release
-BIN="$(swift build -c release --show-bin-path)/Superbrowser"
+# Only the bundled output goes into the app; esbuild already inlined everything but electron.
+STAGE="$ROOT/build/stage"
+rm -rf "$STAGE"
+mkdir -p "$STAGE"
+cp -R dist "$STAGE/dist"
+# productName sets the app name and so the userData dir (~/Library/Application Support/Superbrowser),
+# the same one `npm start` uses.
+node -e '
+  const root = require(process.argv[1]);
+  const pkg = { name: root.name, productName: root.productName, version: root.version, main: root.main };
+  require("fs").writeFileSync(process.argv[2], JSON.stringify(pkg, null, 2) + "\n");
+' "$ROOT/package.json" "$STAGE/package.json"
 
-rm -rf "$APP"
-mkdir -p "$APP/Contents/MacOS"
-cp "$BIN" "$APP/Contents/MacOS/Superbrowser"
+ELECTRON_VERSION="$(node -p 'require("electron/package.json").version')"
+npx --no-install electron-packager "$STAGE" Superbrowser \
+  --platform=darwin --arch=arm64 \
+  --electron-version="$ELECTRON_VERSION" \
+  --app-bundle-id=dev.superbrowser.app \
+  --icon="$ROOT/resources/icon.icns" \
+  --usage-description.Camera="Websites you allow can use your camera, for example Google Meet." \
+  --usage-description.Microphone="Websites you allow can use your microphone, for example Google Meet." \
+  --out="$ROOT/build" --overwrite --prune --quiet
 
-cat > "$APP/Contents/Info.plist" <<'PLIST'
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>CFBundleIdentifier</key><string>dev.superbrowser.app</string>
-  <key>CFBundleName</key><string>Superbrowser</string>
-  <key>CFBundleExecutable</key><string>Superbrowser</string>
-  <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleShortVersionString</key><string>0.1.0</string>
-  <key>CFBundleVersion</key><string>1</string>
-  <key>LSUIElement</key><true/>
-  <key>LSMinimumSystemVersion</key><string>14.0</string>
-  <key>NSHighResolutionCapable</key><true/>
-</dict>
-</plist>
-PLIST
-plutil -lint "$APP/Contents/Info.plist"
-
-codesign --force --sign - "$APP"
+APP="$ROOT/build/Superbrowser-darwin-arm64/Superbrowser.app"
+codesign --force --deep --sign - "$APP"
+codesign --verify --deep --strict "$APP"
 FINAL="$APP"
 
 if [ "$INSTALL" = 1 ]; then
+  osascript -e 'quit app "Superbrowser"' >/dev/null 2>&1 || true
   mkdir -p "$HOME/Applications"
   rm -rf "$HOME/Applications/Superbrowser.app"
   cp -R "$APP" "$HOME/Applications/Superbrowser.app"
   FINAL="$HOME/Applications/Superbrowser.app"
-  echo "If Accessibility stopped working after a rebuild, run: tccutil reset Accessibility dev.superbrowser.app, then re-grant."
 fi
 
 echo "$FINAL"
