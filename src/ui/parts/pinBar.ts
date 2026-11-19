@@ -2,7 +2,7 @@ import type { SuperbrowserApi } from '../../preload/ui.ts';
 import { pinLabel } from '../../core/pins.ts';
 import { keyedMoves } from '../../core/reorder.ts';
 import type { UiPin, UiState } from '../../shared/types.ts';
-import { el, faviconIcon, isImageUrl } from './dom.ts';
+import { el, faviconIcon, isImageUrl, markCurrent } from './dom.ts';
 
 /** The tile's tooltip and accessible name: `Inbox · ACME (⌥⌘1)`. */
 const tileLabel = (p: UiPin): string => (p.shortcut === null ? pinLabel(p) : `${pinLabel(p)} (⌥⌘${p.shortcut})`);
@@ -41,7 +41,7 @@ export function setupPinBar(opts: { bar: HTMLElement; sb: SuperbrowserApi }): { 
       tile.querySelector('.icon')!.replaceWith(faviconIcon(src));
     }
     tile.querySelector<HTMLElement>('.pin-dot')!.style.background = p.color;
-    tile.classList.toggle('on', p.active);
+    markCurrent(tile, p.active);
   }
 
   function render(s: UiState): void {

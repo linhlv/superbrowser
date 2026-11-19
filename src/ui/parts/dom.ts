@@ -19,3 +19,10 @@ export function faviconIcon(favicon: string | null | undefined): HTMLElement {
   img.src = favicon;
   return img;
 }
+
+/** The current profile pill or active pin tile: the `on` look plus `aria-current` for assistive tech (removed when not). */
+export function markCurrent(node: HTMLElement, on: boolean): void {
+  node.classList.toggle('on', on);
+  if (on) node.setAttribute('aria-current', 'true');
+  else node.removeAttribute('aria-current');
+}

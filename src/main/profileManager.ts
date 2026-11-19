@@ -20,7 +20,7 @@ export type ProfileManagerDeps = {
 
 /**
  * The profiles' order and hidden set (`state.profileOrder`, `state.hiddenProfiles`) and what follows them:
- * the profiles TabManager shows, hidden profiles' tabs muted, the menu, and the profile dot's right-click menu.
+ * the profiles TabManager shows, hidden profiles' tabs muted, the menu, and the profile pill's right-click menu.
  * A hidden profile's tabs stay (in TabManager and in `state.tabs`) so unhiding brings them back.
  */
 export class ProfileManager {
@@ -54,7 +54,7 @@ export class ProfileManager {
     if (next) { state.profileOrder = next; this.changed(); }
   }
 
-  /** The profile dot's right-click menu: move, hide, open in Chrome. */
+  /** The profile pill's right-click menu: move, hide, open in Chrome. */
   showMenu(dir: string): void {
     const { state, window, log } = this.deps;
     const order = (step: -1 | 1) => moveProfile(state.knownProfiles, state.profileOrder, state.hiddenProfiles, dir, step);

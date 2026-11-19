@@ -1,6 +1,14 @@
 export type Pin = { dir: string; url: string; title: string; favicon: string | null };
 export type PinTarget = { kind: 'tab'; id: number } | { kind: 'open'; url: string };
 
+const MAX_FAVICON = 64 * 1024;
+
+/** A favicon worth saving: an http(s) or `data:image/…` URL of at most 64 KB (a page can't bloat state.json). */
+export function usableFavicon(v: string | null): string | null {
+  if (v === null || v.length > MAX_FAVICON) return null;
+  return /^https?:\/\//i.test(v) || /^data:image\//i.test(v) ? v : null;
+}
+
 export function pinHost(url: string): string | null {
   try {
     const u = new URL(url);
@@ -28,8 +36,8 @@ export function addPin(pins: Pin[], pin: Pin): Pin[] {
   const key = pinKey(pin.dir, pin.url);
   if (key === null) return pins;
   const i = pins.findIndex((p) => keyOf(p) === key);
-  if (i < 0) return [...pins, pin];
-  return pins.map((p, j) => (j === i ? { ...p, url: pin.url, title: pin.title, favicon: pin.favicon } : p));
+  if (i < 0) return [...pins, { ...pin, favicon: usableFavicon(pin.favicon) }];
+  return pins.map((p, j) => (j === i ? { ...p, url: pin.url, title: pin.title, favicon: usableFavicon(pin.favicon) } : p));
 }
 
 export function removePin(pins: Pin[], key: string): Pin[] {
@@ -64,7 +72,7 @@ export function decodePins(v: unknown): Pin[] {
       dir: o['dir'],
       url: o['url'],
       title: typeof o['title'] === 'string' ? o['title'] : '',
-      favicon: typeof o['favicon'] === 'string' ? o['favicon'] : null,
+      favicon: usableFavicon(typeof o['favicon'] === 'string' ? o['favicon'] : null),
     });
   }
   return out;
@@ -97,9 +105,18 @@ export function forgetUnpinned(remembered: ReadonlyMap<string, number>, pins: Pi
   return new Map([...remembered].filter(([k]) => keys.has(k)));
 }
 
-export function withFavicon(pins: Pin[], key: string, favicon: string | null): Pin[] {
+export function withFavicon(pins: Pin[], key: string, raw: string | null): Pin[] {
+  const favicon = usableFavicon(raw);
   if (favicon === null) return pins;
   const i = pins.findIndex((p) => keyOf(p) === key);
   if (i < 0 || pins[i]!.favicon === favicon) return pins;
   return pins.map((p, j) => (j === i ? { ...p, favicon } : p));
+}
+
+/** A pin's title follows its tab's; the same array when unchanged, and an empty title never clears it. */
+export function withTitle(pins: Pin[], key: string, title: string): Pin[] {
+  if (title === '') return pins;
+  const i = pins.findIndex((p) => keyOf(p) === key);
+  if (i < 0 || pins[i]!.title === title) return pins;
+  return pins.map((p, j) => (j === i ? { ...p, title } : p));
 }

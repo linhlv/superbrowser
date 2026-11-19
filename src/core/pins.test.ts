@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { addPin, decodePins, forgetUnpinned, keyOf, movePin, pinKey, pinLabel, pinTarget, rememberShown, withFavicon } from './pins.ts';
+import { addPin, decodePins, forgetUnpinned, keyOf, movePin, pinKey, pinLabel, pinTarget, rememberShown, withFavicon, withTitle, usableFavicon } from './pins.ts';
 import type { Pin } from './pins.ts';
 
 const pin = (dir: string, url: string, title = 't'): Pin => ({ dir, url, title, favicon: null });

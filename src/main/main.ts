@@ -7,7 +7,7 @@ import {
 import type { HistoryEntry } from '../core/history.ts';
 import { chromeMajor, userAgent } from '../core/identity.ts';
 import {
-  addPin, forgetUnpinned, keyOf, movePin, pinKey, pinLabel, pinTarget, rememberShown, removePin, withFavicon, type Pin,
+  addPin, forgetUnpinned, keyOf, movePin, pinKey, pinLabel, pinTarget, rememberShown, removePin, withFavicon, withTitle, type Pin,
 } from '../core/pins.ts';
 import { mergeProfiles, profileLabel, setDisplayName, withDisplayNames } from '../core/profiles.ts';
 import { createStore } from '../core/store.ts';
@@ -172,7 +172,10 @@ function start(): void {
         if (!profiles.dirs.has(pin.dir)) continue;
         const key = keyOf(pin);
         const t = pinTarget(pin, tabs.tabsOf(pin.dir), remembered.get(key) ?? null);
-        if (t.kind === 'tab') pins = withFavicon(pins, key, tabs.faviconOf(t.id));
+        if (t.kind === 'tab') {
+          pins = withFavicon(pins, key, tabs.faviconOf(t.id));
+          pins = withTitle(pins, key, tabs.titleOf(pin.dir, t.id));
+        }
       }
       if (pins !== state.pins) {
         state.pins = pins;

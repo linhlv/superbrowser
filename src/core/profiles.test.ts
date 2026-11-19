@@ -175,3 +175,8 @@ test('profileLabel / withDisplayNames: display name wins, Chrome name otherwise'
   assert.equal(profileLabel({ ...p, dir: 'toString' }, {}), 'Person 1');
   assert.deepEqual(withDisplayNames([p], { Default: 'ACME' }), [{ ...p, name: 'ACME' }]);
 });
+test('initials: keeps a ZWJ emoji and a combining accent whole', () => {
+  assert.equal(initials('👨‍👩‍👧 Family'), '👨‍👩‍👧F');
+  assert.equal(initials('école'), 'ÉC');
+  assert.equal(initials('🇻🇳 Viet'), '🇻🇳V');
+});

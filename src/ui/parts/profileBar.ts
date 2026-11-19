@@ -1,7 +1,7 @@
 import type { SuperbrowserApi } from '../../preload/ui.ts';
 import { keyedMoves } from '../../core/reorder.ts';
 import type { UiProfile, UiState } from '../../shared/types.ts';
-import { el } from './dom.ts';
+import { el, markCurrent } from './dom.ts';
 import { setupProfileDrag } from './profileDrag.ts';
 
 /** The pill's tooltip and accessible name: `ACME (⌃1)`, or `ACME — Chrome name (⌃1)` when a display name is set. */
@@ -101,7 +101,7 @@ export function setupProfileBar(opts: { bar: HTMLElement; sb: SuperbrowserApi })
     editing = null; // first: the field's blur when it leaves the DOM must not count
     const p = latest.get(e.dir);
     if (p) updatePill(e.pill, p);
-    e.pill.classList.toggle('on', e.dir === activeProfile);
+    markCurrent(e.pill, e.dir === activeProfile);
     e.holder.replaceWith(e.pill);
     if (focused) e.pill.focus();
   }
@@ -133,7 +133,7 @@ export function setupProfileBar(opts: { bar: HTMLElement; sb: SuperbrowserApi })
     profileDrag.cancel();
     const holder = el('div', 'pf pf-editing');
     holder.dataset['dir'] = dir;
-    holder.classList.toggle('on', dir === activeProfile);
+    markCurrent(holder, dir === activeProfile);
     const dot = el('span', 'dot', p.initials);
     dot.style.background = p.color;
     const input = el('input', 'pf-edit');
@@ -195,7 +195,7 @@ export function setupProfileBar(opts: { bar: HTMLElement; sb: SuperbrowserApi })
         bar.insertBefore(nodeOf(dir)!, before === null ? null : nodeOf(before)!);
       }
     }
-    for (const dir of pills.keys()) nodeOf(dir)!.classList.toggle('on', dir === s.activeProfile);
+    for (const dir of pills.keys()) markCurrent(nodeOf(dir)!, dir === s.activeProfile);
   }
 
   return { render, startEdit };

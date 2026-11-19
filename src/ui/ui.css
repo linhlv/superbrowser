@@ -121,8 +121,8 @@ body.collapsed #side { display: none; }
   flex: 0 1 auto; min-width: 42px;
 }
 .pf {
-  -webkit-app-region: no-drag; flex: none; display: flex; align-items: center; height: 34px; padding: 2px;
-  border: 0; border-radius: 17px; background: none; transition: background .15s;
+  -webkit-app-region: no-drag; flex: none; display: flex; align-items: center; height: 36px; padding: 3px;
+  border: 0; border-radius: 18px; background: none; transition: background .15s;
 }
 .pf:hover, .pf.dragging { background: rgba(255,255,255,.14); }
 /* The current profile: a filled light pill, with or without names. */

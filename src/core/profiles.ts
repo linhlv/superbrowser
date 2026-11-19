@@ -135,10 +135,13 @@ export function withDisplayNames(list: Profile[], names: Record<string, string>)
   return list.map((p) => ({ ...p, name: profileLabel(p, names) }));
 }
 
-/** Two words give their first letters; one word gives its first two; uppercase; '?' when empty. */
+const segmenter = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+
+/** Two words give their first letters (whole graphemes: ZWJ emoji, flags and accents stay intact); one word gives its first two; uppercase; '?' when empty. */
 export function initials(label: string): string {
   const words = label.trim().split(/\s+/).filter((w) => w !== '');
   if (words.length === 0) return '?';
-  const chars = words.length >= 2 ? [Array.from(words[0]!)[0]!, Array.from(words[1]!)[0]!] : Array.from(words[0]!).slice(0, 2);
+  const graphemes = (w: string): string[] => Array.from(segmenter.segment(w), (s) => s.segment);
+  const chars = words.length >= 2 ? [graphemes(words[0]!)[0]!, graphemes(words[1]!)[0]!] : graphemes(words[0]!).slice(0, 2);
   return chars.join('').toUpperCase();
 }

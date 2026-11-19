@@ -203,7 +203,7 @@ export function buildAddProfileMenu(ctx: AddProfileMenuContext): Menu {
   ]);
 }
 
-/** The right-click menu of a profile dot in the bottom bar. */
+/** The right-click menu of a profile pill in the bottom bar. */
 export type ProfileMenuContext = {
   canMoveLeft: boolean;
   canMoveRight: boolean;

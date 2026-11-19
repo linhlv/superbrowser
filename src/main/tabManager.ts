@@ -177,6 +177,11 @@ export class TabManager {
     return (this.profiles.get(dir)?.tabs ?? []).map((t) => ({ id: t.id, url: t.url }));
   }
 
+  /** The tab's title as the model holds it ('' when unknown). */
+  titleOf(dir: string, id: number): string {
+    return this.profiles.get(dir)?.tabs.find((t) => t.id === id)?.title ?? '';
+  }
+
   /** The tab's current favicon (null until its page reports one, or if it has no view yet). */
   faviconOf(id: number): string | null {
     return this.live.get(id)?.favicon ?? null;
