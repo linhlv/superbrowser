@@ -294,7 +294,7 @@ export function setupPanel(opts: { sb: SuperbrowserApi; root: HTMLElement; tabs:
   }
 
   function onPanel(req: PanelRequest): void {
-    if (req.mode === 'toggle' && shown === req.panel) { close(); return; }
+    if (!req.open) { if (shown === req.panel) close(); return; }
     if (shown !== req.panel) {
       reset();
       shown = req.panel;

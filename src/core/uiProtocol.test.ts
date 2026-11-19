@@ -43,6 +43,8 @@ test('parseUiCommand: accepts every well-formed command and keeps only its field
     { type: 'historyMenu', url: 'https://a.com/x' },
     { type: 'bookmarkMenu', id: 5 },
     { type: 'renameBookmark', id: 5, title: 'Sprint board' },
+    { type: 'setSectionOpen', section: 'history', open: true },
+    { type: 'setSectionOpen', section: 'bookmarks', open: false },
   ];
   for (const c of cases) assert.deepEqual(parseUiCommand(c, known), c);
   assert.deepEqual(parseUiCommand({ type: 'back', extra: 'x' }, known), { type: 'back' });
@@ -106,5 +108,13 @@ test('parseUiCommand: rejects bad reorderProfile', () => {
     { type: 'reorderProfile', dir: 'Default', before: 'Profile 9' },  // unknown before
     { type: 'reorderProfile', dir: 'Profile 9', before: null },       // unknown dir
     { type: 'reorderProfile', dir: 'Default', before: 3 },
+  ]) assert.equal(parseUiCommand(c, known), null, JSON.stringify(c));
+});
+
+test('parseUiCommand: rejects bad setSectionOpen', () => {
+  for (const c of [
+    { type: 'setSectionOpen', section: 'downloads', open: true },
+    { type: 'setSectionOpen', section: 'history', open: 'yes' },
+    { type: 'setSectionOpen', section: 'history' },
   ]) assert.equal(parseUiCommand(c, known), null, JSON.stringify(c));
 });

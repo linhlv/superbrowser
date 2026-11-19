@@ -55,3 +55,10 @@ test('lists, profiles, bounds, permissions are validated', () => {
   assert.equal(decodeState({ activeProfile: 'Default', windowBounds: { x: 1, y: 2, width: 3, height: 4 } }).windowBounds!.height, 4);
   assert.equal(decodeState({ activeProfile: 'Default' }).activeProfile, 'Default');
 });
+
+test('decodeState: openSections is tolerant', () => {
+  assert.deepEqual(decodeState({}).openSections, []);
+  assert.deepEqual(decodeState({ openSections: 'history' }).openSections, []);
+  assert.deepEqual(decodeState({ openSections: ['history', 'history', 'x', 3, 'bookmarks'] }).openSections, ['bookmarks', 'history']);
+  assert.equal(decodeState({ openSections: 'bad', showNames: true }).showNames, true);
+});

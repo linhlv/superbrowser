@@ -1,4 +1,5 @@
-import type { Profile } from '../shared/types.ts';
+import type { Profile, Section } from '../shared/types.ts';
+import { SECTIONS, isSection } from './sections.ts';
 
 export type Decision = 'allow' | 'deny';
 export type SavedTabs = { tabs: { url: string; title: string }[]; activeIndex: number };
@@ -8,6 +9,7 @@ export type AppState = {
   activeProfile: string | null;
   sidebarVisible: boolean;
   showNames: boolean;
+  openSections: Section[];
   windowBounds: Rect | null;
   profileOrder: string[];
   hiddenProfiles: string[];
@@ -23,6 +25,7 @@ export function defaultState(): AppState {
     activeProfile: null,
     sidebarVisible: true,
     showNames: false,
+    openSections: [],
     windowBounds: null,
     profileOrder: [],
     hiddenProfiles: [],
@@ -37,6 +40,11 @@ type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !Array.isArray(v);
 const bool = (v: unknown, d: boolean): boolean => (typeof v === 'boolean' ? v : d);
 const strings = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []);
+
+function decodeSections(v: unknown): Section[] {
+  const found = Array.isArray(v) ? v.filter(isSection) : [];
+  return SECTIONS.filter((s) => found.includes(s));
+}
 
 function decodeProfiles(v: unknown): Profile[] {
   if (!Array.isArray(v)) return [];
@@ -105,6 +113,7 @@ export function decodeState(raw: unknown): AppState {
     activeProfile: typeof raw['activeProfile'] === 'string' ? raw['activeProfile'] : null,
     sidebarVisible: bool(raw['sidebarVisible'], d.sidebarVisible),
     showNames: bool(raw['showNames'], d.showNames),
+    openSections: decodeSections(raw['openSections']),
     windowBounds: decodeBounds(raw['windowBounds']),
     profileOrder: strings(raw['profileOrder']),
     hiddenProfiles: strings(raw['hiddenProfiles']),

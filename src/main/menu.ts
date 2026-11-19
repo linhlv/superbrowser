@@ -26,13 +26,13 @@ export type MenuContext = {
   toggleDevTools(): void;
   back(): void;
   forward(): void;
-  /** Toggles the shown profile's history panel in the main window's sidebar (shown first if hidden), even from a popup. */
+  /** Toggles the shown profile's history section in the main window's sidebar (shown first if hidden), even from a popup. */
   showHistory(): void;
   /** Asks, then deletes all of the shown profile's history. */
   clearHistory(): void;
-  /** Bookmarks the main window's active tab (never a popup's) unless it already is, then shows it in the bookmarks panel. */
+  /** Bookmarks the main window's active tab (never a popup's) unless it already is, then shows it in the bookmarks section. */
   bookmarkPage(): void;
-  /** Toggles the shown profile's bookmarks panel, like `showHistory`. */
+  /** Toggles the shown profile's bookmarks section, like `showHistory`. */
   showBookmarks(): void;
   showProfile(dir: string): void;
   /** Copy the shown profile's logins from Chrome: 'add' keeps the session's cookies, 'replace' (confirmed) overwrites. */

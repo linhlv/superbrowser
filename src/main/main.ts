@@ -10,12 +10,13 @@ import { mergeProfiles } from '../core/profiles.ts';
 import { createStore } from '../core/store.ts';
 import { sameSavedTabs } from '../core/tabs.ts';
 import { downloadsOf } from '../core/downloads.ts';
-import { bookmarkMenuSpec, historyMenuSpec, panelRequestFor } from '../core/libraryMenus.ts';
+import { bookmarkMenuSpec, historyMenuSpec } from '../core/libraryMenus.ts';
+import { sectionToggle, withSection } from '../core/sections.ts';
 import { splitWords } from '../core/searchText.ts';
 import { inlineCompletion, rankSuggestions } from '../core/suggest.ts';
 import { barProfiles, parseUiCommand } from '../core/uiProtocol.ts';
 import {
-  IPC, type BookmarkNode, type DownloadState, type LibraryReply, type PanelRequest, type UiCommand, type UiState,
+  IPC, type BookmarkNode, type DownloadState, type LibraryReply, type Section, type UiCommand, type UiState,
 } from '../shared/types.ts';
 import { createBrowserWindow, createUiView, FindBar, layoutWindow } from './browserWindow.ts';
 import { newProfileInChrome, openProfileInChrome, readChromeProfiles } from './chrome.ts';
@@ -127,6 +128,7 @@ function start(): void {
         canGoForward: snap.canGoForward,
         sidebarVisible: state.sidebarVisible,
         showNames: state.showNames,
+        openSections: state.openSections,
         downloads: downloadsOf(downloads, snap.dir), // other profiles' file names stay out of view (screen sharing)
       };
       ui.webContents.send(IPC.state, uiState);
@@ -219,13 +221,18 @@ function start(): void {
       return response === 0;
     };
 
-    /** In the main window even if a popup has focus; the sidebar is shown first if hidden (and the panel then shown, never toggled closed). */
-    const showPanel = (request: PanelRequest): void => {
+    /** In the main window even if a popup has focus; the sidebar is shown first if hidden (and the section then opened, never folded). */
+    const showPanel = (panel: Section, mode: 'toggle' | 'show', highlight: number | null): void => {
       const reveal = !state.sidebarVisible;
       if (reveal) setSidebarVisible(true);
-      window.focus();
-      ui.webContents.focus(); // so the panel's search box can take the keyboard
-      toUi(IPC.panel, panelRequestFor(request, reveal));
+      const r = sectionToggle(state.openSections, panel, mode, highlight, reveal);
+      state.openSections = r.open;
+      store.save(state);
+      if (r.request.open) {
+        window.focus();
+        ui.webContents.focus(); // so the section's search box can take the keyboard
+      }
+      toUi(IPC.panel, r.request);
     };
 
     /** The answer to a request from the UI; history that can't be read gives empty results, never no reply. */
@@ -322,7 +329,7 @@ function start(): void {
           if (added.id !== null && editBookmarks(dir, () => added.tree)) highlight = added.id;
         }
       }
-      showPanel({ panel: 'bookmarks', mode: 'show', highlight });
+      showPanel('bookmarks', 'show', highlight);
     };
 
     const clearHistory = async (): Promise<void> => {
@@ -412,10 +419,10 @@ function start(): void {
         if (!history) tabs.forward();
         else if (history.canGoForward()) history.goForward();
       },
-      showHistory: () => showPanel({ panel: 'history', mode: 'toggle', highlight: null }),
+      showHistory: () => showPanel('history', 'toggle', null),
       clearHistory: () => void clearHistory().catch(logFailure('clearing history')),
       bookmarkPage,
-      showBookmarks: () => showPanel({ panel: 'bookmarks', mode: 'toggle', highlight: null }),
+      showBookmarks: () => showPanel('bookmarks', 'toggle', null),
       showProfile: (dir) => tabs.showProfile(dir),
       importLogins: (mode) => void imports.importCurrent(mode).catch(logFailure('importing logins')),
       importLoginsForAllProfiles: () => void imports.importAll().catch(logFailure('importing logins')),
@@ -479,6 +486,10 @@ function start(): void {
         case 'historyMenu': showHistoryMenu(cmd.url); break;
         case 'bookmarkMenu': showBookmarkMenu(cmd.id); break;
         case 'renameBookmark': renameBookmark(cmd.id, cmd.title); break;
+        case 'setSectionOpen':
+          state.openSections = withSection(state.openSections, cmd.section, cmd.open);
+          store.save(state);
+          break;
       }
     };
     // Validated against the profiles visible right now (profiles.dirs is replaced on every change).

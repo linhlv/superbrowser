@@ -1,4 +1,5 @@
 import { isWebUrl } from './address.ts';
+import { isSection } from './sections.ts';
 import type { Profile, UiCommand, UiState } from '../shared/types.ts';
 
 /** Visible profiles in bar order, each with its ⌃N shortcut (only the first nine have one). */
@@ -58,6 +59,8 @@ export function parseUiCommand(raw: unknown, knownDirs: ReadonlySet<string>): Ui
       return isId(id) ? { type, id } : null;
     case 'renameBookmark':
       return isId(id) && isText(raw['title'], 1024) ? { type, id, title: raw['title'] } : null;
+    case 'setSectionOpen':
+      return isSection(raw['section']) && typeof raw['open'] === 'boolean' ? { type, section: raw['section'], open: raw['open'] } : null;
     case 'addProfileMenu':
     case 'newTab':
     case 'back':

@@ -9,6 +9,7 @@ export type UiState = {
   url: string; canGoBack: boolean; canGoForward: boolean;
   sidebarVisible: boolean; showNames: boolean;
   downloads: DownloadState[];   // the shown profile's only
+  openSections: Section[];
 };
 export type UiCommand =
   | { type: 'selectProfile'; dir: string } | { type: 'profileMenu'; dir: string }
@@ -23,7 +24,8 @@ export type UiCommand =
   | { type: 'openUrl'; url: string; newTab: boolean }
   | { type: 'historyMenu'; url: string }
   | { type: 'bookmarkMenu'; id: number }
-  | { type: 'renameBookmark'; id: number; title: string };
+  | { type: 'renameBookmark'; id: number; title: string }
+  | { type: 'setSectionOpen'; section: Section; open: boolean };
 export type Suggestion = { url: string; title: string; bookmarked: boolean };
 export type HistoryRow = { url: string; title: string; time: number; day: number; favicon: string | null };
 export type BookmarkNode =
@@ -33,7 +35,9 @@ export type LibraryReply =
   | { kind: 'suggestions'; seq: number; text: string; completion: string | null; items: Suggestion[] }
   | { kind: 'historyPage'; seq: number; rows: HistoryRow[]; more: boolean }
   | { kind: 'bookmarks'; seq: number; nodes: BookmarkNode[]; favicons: Record<string, string> };
-export type PanelRequest = { panel: 'history' | 'bookmarks'; mode: 'toggle' | 'show'; highlight: number | null };
+export type Section = 'bookmarks' | 'history';
+/** `open` is the section's state after the request; when open, the UI focuses its search. */
+export type PanelRequest = { panel: Section; open: boolean; highlight: number | null };
 export type FindResult = { active: number; matches: number };
 export const IPC = {
   state: 'ui:state', command: 'ui:command', focusAddress: 'ui:focus-address',

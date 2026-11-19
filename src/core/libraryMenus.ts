@@ -1,4 +1,4 @@
-import type { BookmarkNode, PanelRequest } from '../shared/types.ts';
+import type { BookmarkNode } from '../shared/types.ts';
 
 /** An item of a bookmark's, folder's or history entry's right-click menu; main turns the spec into a native menu. */
 export type LibraryMenuItem =
@@ -38,9 +38,4 @@ export function historyMenuSpec(): LibraryMenuItem[] {
     { id: 'separator' },
     { id: 'deleteFromHistory', label: 'Delete from History' },
   ];
-}
-
-/** What to send the UI for ⌘Y / ⌥⌘B: a 'toggle' that first had to reveal the hidden sidebar must show the panel, not close it. */
-export function panelRequestFor(request: PanelRequest, revealedSidebar: boolean): PanelRequest {
-  return revealedSidebar && request.mode === 'toggle' ? { ...request, mode: 'show' } : request;
 }
