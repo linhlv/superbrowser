@@ -101,7 +101,7 @@ A spike (Electron 45.3.4, Chromium 156; scratchpad, not in the repo) showed:
   profiles' tabs, multiple Superbrowser windows (one main window; popups are the
   only extra windows), sync, Windows/Linux, App Store, other users.
 - Creating brand-new profiles that don't exist in Chrome.
-- Importing anything other than cookies (history, bookmarks, passwords).
+- Importing passwords (bookmarks and history: see `2026-11-19-bookmarks-history-design.md`).
 
 ## Anti-goals (a failure even if it technically works)
 

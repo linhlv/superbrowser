@@ -466,6 +466,12 @@ export function popupWindowOptions(dir: string): { width: number; height: number
 - **blob: URLs open as popups** in the opener's profile (`windowOpenTarget`). This survives the page revoking the URL right after `window.open`. A context-menu "Open Link in New Tab" on a blob: link opens a tab.
 - **`nodeIntegrationInSubFrames: true` on page views** (`PAGE_WEB_PREFERENCES`), so the per-session frame preload (passkey fail-fast) also runs in iframes. Page views stay sandboxed with context isolation, and the preload exposes nothing to pages.
 - **Hidden profiles are muted (R5):** a hidden profile's live tab views keep running but are muted until the profile is shown again.
+- **Bookmarks and history (added later):** see `docs/superpowers/plans/2026-11-19-bookmarks-history.md` and `docs/superpowers/specs/2026-11-19-bookmarks-history-design.md`. This supersedes the non-goal of importing history and bookmarks. Controller rulings during that work that differ from the plan's text:
+  - the "Other Bookmarks" and "Mobile Bookmarks" wrapper folders are created only when something is added to them (bookmarks-bar items go at the top level);
+  - history `page()` never splits rows with equal times across pages;
+  - only real corruption sets `history.db` aside;
+  - inline rename commits only on Enter (blur, Esc and a profile change cancel it);
+  - an empty folder title is shown as "Untitled".
 - **Tests sit next to sources** (`src/**/*.test.ts`), not in `test/`, which would collide with v1's `Tests/` on the case-insensitive disk.
 - **Client hints insert the Google Chrome brand (final review F5; overrides the spec's fixed `Sec-CH-UA` string, which was Chrome 131's):**
   - `rewriteClientHints` parses Electron's own `Sec-CH-UA` and `Sec-CH-UA-Full-Version-List` values and adds `"Google Chrome"` (major, or full version). Electron's GREASE entry and `"Chromium"` are kept; the three take the slots Chrome's `GenerateBrandVersionList` gives them for that major (for 156: GREASE, Chromium, Google Chrome), so the header equals what Chrome 156 sends. A value that doesn't parse gets the entry appended.

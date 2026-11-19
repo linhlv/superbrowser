@@ -1,6 +1,6 @@
 # Superbrowser
 
-A macOS browser that shows every Chrome profile in one ordinary window. It has an Arc-style sidebar with the tabs of the current profile and a slim profile bar at the bottom: click a profile's dot or press ⌃1…⌃9 to switch. Each profile has its own isolated storage, so every profile stays signed in to its own accounts at the same time. Profile names, colours and order come from Chrome, and logins can be imported from Chrome so you don't sign in again. Superbrowser is built on Electron (Chromium) and presents itself to sites as Google Chrome.
+A macOS browser that shows every Chrome profile in one ordinary window. It has an Arc-style sidebar with the tabs of the current profile and a slim profile bar at the bottom: click a profile's dot or press ⌃1…⌃9 to switch. Each profile has its own isolated storage, so every profile stays signed in to its own accounts at the same time. Profile names, colours and order come from Chrome, and logins, bookmarks and history can be imported from Chrome so you don't start over. Superbrowser is built on Electron (Chromium) and presents itself to sites as Google Chrome.
 
 Requires macOS on Apple Silicon, Google Chrome (for profiles and login import), Node 22 and the Command Line Tools (no Xcode).
 
@@ -18,14 +18,16 @@ Superbrowser keeps its data in `~/Library/Application Support/Superbrowser`:
 
 - `state.json` holds tabs, window position, profile order, hidden profiles and saved site permissions.
 - `Partitions/` holds each profile's cookies and storage.
+- `Profiles/<profile>/` holds that profile's `history.db` and `bookmarks.json`.
 
 `npm start` (development) uses the same folder.
 
 ## First run
 
-1. Superbrowser offers to **import logins from Chrome** for all profiles. Click **Import All**, then **Import** on the short explanation sheet.
+1. Superbrowser offers to **import your logins, bookmarks and history from Chrome** for all profiles. Click **Import All**, then **Import** on the short explanation sheet.
 2. macOS asks for the "Chrome Safe Storage" Keychain item. Click **Allow**, not **Always Allow**. The prompt comes from the system's `security` tool, so Always Allow would let any program on your Mac read Chrome's cookie key through that tool without asking. With Allow, macOS asks once each time Superbrowser imports after a launch. Superbrowser keeps the key in memory for that run and never changes the Keychain item.
 3. A summary lists what was imported per profile. Your Google accounts are now signed in, in the right profile each.
+4. Bookmarks and history are then imported too, with a second summary such as "Personal: 175 bookmarks, 12,685 pages of history imported (3 skipped)." This step needs no Keychain prompt.
 
 If you clicked **Always Allow** before (an earlier version said to), undo it: open Keychain Access, find "Chrome Safe Storage" in the login keychain, open it, go to **Access Control**, select `security` in the list of allowed applications, click **−** and **Save Changes**.
 
@@ -36,6 +38,15 @@ You can repeat the import any time from the **Profiles** menu:
 - **Replace Logins from Chrome…**: overwrites the shown profile's logins with Chrome's current ones, after a confirmation.
 
 A normal import only adds logins Superbrowser doesn't have yet. It never signs you out. Superbrowser never writes to Chrome's files or its Keychain item.
+
+### Bookmarks and history
+
+**Profiles ▸ Import Bookmarks and History from Chrome** (also in the "+" menu) imports every visible profile's bookmarks and the last 90 days of its history. It is separate from the logins import and needs no Keychain access.
+
+- Bookmarks come from each profile's `Bookmarks` and `AccountBookmarks` files, merged without duplicates, with the bookmarks bar at the top level and the rest in "Other Bookmarks" and "Mobile Bookmarks" folders. Only http and https addresses are kept.
+- It only adds. Running it again adds nothing already there, and it never changes Chrome.
+- Superbrowser then records your own browsing in each profile's history. Address suggestions and the History and Bookmarks panels use it, one profile at a time.
+- **Bookmarks ▸ Bookmark This Page** (⌘D) adds the shown page. **History ▸ Clear History…** clears the shown profile's history after a confirmation.
 
 ## Shortcuts
 
@@ -53,6 +64,9 @@ A normal import only adds logins Superbrowser doesn't have yet. It never signs y
 | ⌘F, ⌘G, ⇧⌘G | Find in page, next, previous (Esc closes) |
 | ⌘+ (or ⌘=), ⌘−, ⌘0 | Zoom in, out, actual size |
 | ⌃⌘F | Full screen |
+| ⌘Y | Show or hide History in the sidebar |
+| ⌘D | Bookmark this page |
+| ⌥⌘B | Show or hide Bookmarks in the sidebar |
 | ⌘P | Print |
 | ⌥⌘I | Developer Tools for the page |
 | ⌘Q, red button | Quit (tabs come back on the next launch) |
@@ -85,6 +99,7 @@ Sites ask before using the camera, microphone, screen sharing, notifications, lo
 
 - **No passkeys.** A passkey request fails at once, so sites offer another way. Use password + 2-step code, or import logins from Chrome.
 - **No password autofill.** Copy passwords from the macOS Passwords app.
+- **Bookmarks and history import is one-way and add-only.** Later changes in Chrome don't carry over, and Superbrowser keeps 90 days of history. Deleting in Superbrowser never touches Chrome.
 - **No Chrome extensions.** Use **Open This Profile in Chrome** for anything that needs one.
 - **claude.ai needs a fresh login.** Its login is tied to the device and doesn't import.
 - **Client hints are incomplete.** Electron sends `Sec-CH-UA` (which Superbrowser makes name Google Chrome) only with a page's own requests, not when a page is opened, and never sends the extra hints a site can ask for. Real Chrome sends both.
@@ -164,6 +179,18 @@ Walk this list on the installed app after a change that affects it.
 32. Download a PDF twice. Both appear in the sidebar's Downloads list, and `~/Downloads` has `x.pdf` and `x (1).pdf`. A "Downloaded x.pdf" notification appears. Clicking a row shows the file in Finder. ⌃2 shows another profile: its Downloads list doesn't show `x.pdf`.
 33. YouTube full screen: the video fills the window and the window goes full screen. Esc restores the sidebar and bar. If the window was already full screen before, it stays full screen. ⌃2 during a full-screen video ends it.
 
+**Bookmarks and history**
+
+34. **Profiles ▸ Import Bookmarks and History from Chrome**: no Keychain prompt and no tab reload. One sheet lists a line per visible profile, such as "Personal: 175 bookmarks, 12,685 pages of history imported (3 skipped).". Run it again: every line reports 0 imported. It also works while Chrome is running, and Chrome's bookmarks and history are unchanged afterwards. The "+" menu has the same item.
+35. On first run (see Login import), the question reads "Import your logins, bookmarks and history from Chrome for all profiles?". **Import All** runs the logins import, then this one with its own summary. Cancelling the logins explanation still imports bookmarks and history.
+36. Click the address field and type part of a page title or host. At most 6 rows appear under the field with stars on bookmarks and "Search Google for …" last. Enter with no row selected goes to what you typed. Arrow keys move through rows, Up past the first restores your text, and Esc restores the address and closes the list. A host completes inline, and Backspace removes the completion. ⌃2 closes the list, and then only that profile's pages are suggested.
+37. Browse in one profile: open A, click through to B, reload B, go Back, then type a new address C. Only visits are recorded (not reload or Back as new visits). Reopening a closed tab with ⇧⌘T adds no visit. Another profile's History panel doesn't show these pages.
+38. ⌘Y turns the sidebar into History with the search box focused. Rows are grouped by Today, Yesterday and dates, each with its time and host. Typing "ho so" finds Vietnamese titles such as "Hồ sơ…". Scrolling to the bottom loads older days. A click opens the page in the current tab and ⌘-click in a new tab. Right-click ▸ **Delete from History** removes the row and the suggestion. Esc, ✕ or ⌘Y closes the panel, and Downloads stay visible.
+39. ⌥⌘B shows the imported folders. Click a folder to open or close it; an unnamed folder shows "Untitled". Searching shows a flat list with folder paths. Right-click a bookmark: Open in New Tab, Copy Link, Rename…, Move to ▸, Delete. Right-click a folder: New Folder…, Rename…, Delete (a non-empty folder asks first). In Rename, Enter saves and Esc or clicking away cancels.
+40. ⌘D on a page opens Bookmarks with the new bookmark highlighted at the top. ⌘D again highlights it and adds no duplicate. ⌘D on a new tab page adds nothing. With a popup focused, ⌘Y, ⌥⌘B and ⌘D act on the main window.
+41. With the sidebar hidden (⌘S), ⌘Y and ⌥⌘B show the sidebar first. With the History panel open and the sidebar hidden, switch profile, then show the sidebar: only the first page of history loads, and more loads as you scroll.
+42. With a panel open, ⌃2 empties and refills it with that profile's data and keeps the search text. **History ▸ Clear History…** asks "Clear all history for <profile>?". Cancel keeps it, and Clear empties only that profile's history (another profile's suggestions still work).
+
 ## Privacy
 
-Superbrowser talks only to the sites you open. It reads Chrome's profile list and, when you import, a copy of a profile's cookie database and the "Chrome Safe Storage" Keychain item. It never writes to Chrome's data.
+Superbrowser talks only to the sites you open. It reads Chrome's profile list and, when you import, copies of a profile's cookie database, bookmarks and history files, and (for logins only) the "Chrome Safe Storage" Keychain item. It never writes to Chrome's data.

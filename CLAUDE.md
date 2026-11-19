@@ -27,7 +27,8 @@ scripts/make-icon.sh              # resources/Superbrowser.png → resources/ico
   - address parsing, UA/client hints, Chrome profile parsing and merging;
   - state decode and atomic store, the tab model, layout maths;
   - cookie decryption and import planning, the permission policy and prompt queue;
-  - download names and the per-profile downloads list, context-menu spec, popup titles, UI command validation (`uiProtocol.ts`).
+  - download names and the per-profile downloads list, context-menu spec, popup titles, UI command validation (`uiProtocol.ts`);
+  - bookmarks and history: the bookmark tree (`bookmarks.ts`, `bookmarkStore.ts`), history queries and retention (`history.ts`), visit recording rules (`visits.ts`), accent-insensitive matching (`searchText.ts`), address-bar suggestions (`suggest.ts`), parsing Chrome's `Bookmarks`/`AccountBookmarks`/`History` and import planning (`chromeLibrary.ts`), bookmark and history context menus (`libraryMenus.ts`). `address.ts` also has `isWebUrl` and `googleSearchUrl`; `store.ts` has `writeFileAtomic`.
 - **`src/main/`**: thin Electron adapters wired together in `main.ts`:
   - `sessions.ts`: per-profile session, UA, permissions, frame preload, downloads.
   - `tabManager.ts`: one `WebContentsView` per tab, lazy restore, muting.
@@ -38,8 +39,11 @@ scripts/make-icon.sh              # resources/Superbrowser.png → resources/ico
   - `menu.ts`: the application menu and every shortcut. It is the source of truth for shortcuts.
   - `chrome.ts`: reads Chrome's `Local State`; opens a profile in Chrome.
   - `downloads.ts`.
+  - `library.ts`: `Library`, the only access to each profile's `history.db` (`node:sqlite`) and `bookmarks.json`.
+  - `historyRecorder.ts`: records visits from tab navigation events.
+  - `libraryImport.ts`: copies Chrome's files to a temp dir and imports bookmarks and history (add-only).
 - **`src/preload/`**: `ui.ts` (contextBridge API for our UI pages) and `frame.ts` (per-session frame preload: passkey requests fail fast, `navigator.userAgentData` names Google Chrome).
-- **`src/ui/`**: the sidebar + bottom bar page (`index.html`, `ui.ts`) and the find bar (`find.html`, `find.ts`). Our own pages; CSP forbids inline styles/scripts.
+- **`src/ui/`**: the sidebar + bottom bar page (`index.html`, `ui.ts`) and the find bar (`find.html`, `find.ts`). Our own pages; CSP forbids inline styles/scripts. `src/ui/parts/` holds UI helper modules (`suggestions.ts`, `panel.ts`, `dom.ts`) bundled into `ui.ts`; only `src/ui/*.ts` are entry points.
 - **`src/shared/types.ts`**: types and IPC channel names shared by main, preload and UI.
 
 New logic belongs in `src/core` with a test; keep `src/main` to wiring. Tests sit next to sources as `*.test.ts` (`node:test` + `node:assert/strict`). Imports between TS files use explicit `.ts` extensions (`import { x } from './profiles.ts'`) and only erasable TS syntax (no `enum`, `namespace` or constructor parameter properties). Node runs the tests by type stripping.
@@ -55,6 +59,7 @@ Popups are separate small windows (registered in `pages.ts`, `isPopupWindow`). T
 ## Invariants that are easy to break
 
 - **Profile isolation.** The partition is exactly `persist:<chrome profile dir>` (`persist:Default`, `persist:Profile 37`). Get a session only through `profileSession(dir)`. Every web contents, popup, download, service worker and permission decision belongs to exactly one profile. A profile's cookies or storage must never reach another, and nothing may use the default session for pages.
+- **Library isolation.** Every bookmark, history row and suggestion belongs to one profile. They live in `<userData>/Profiles/<chrome profile dir>/history.db` and `bookmarks.json`, reached only through `Library`. History keeps 90 days and stores only http(s) URLs. `node:sqlite` prints an ExperimentalWarning in tests and at app start; that is expected, don't suppress it globally.
 - **Popups and new tabs inherit the opener's profile.**
   - Tab views use `pageWebPreferences(dir)`.
   - Popups use `popupWindowOptions(dir)` (partition plus `PAGE_WEB_PREFERENCES`).
@@ -67,6 +72,7 @@ Popups are separate small windows (registered in `pages.ts`, `isPopupWindow`). T
   - Never write to `~/Library/Application Support/Google/Chrome/**` or the "Chrome Safe Storage" Keychain item.
   - Copy a `Cookies` DB to a temp file before reading it.
   - Import is add-only. Only the explicit, confirmed "Replace Logins" overwrites.
+  - Chrome's `Bookmarks`, `AccountBookmarks` and `History` are copied to a temp dir, then read from the copy. Bookmarks and history import is add-only, one-way, separate from the logins import, and needs no Keychain access.
   - A cookie that can't be imported is skipped and counted; it never aborts the import.
 - **Site permissions are never granted silently** (Electron's default allows everything); `policyFor` decides allow/ask/deny.
   - Only Allow decisions are persisted. Block lasts for the app run.
