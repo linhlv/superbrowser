@@ -467,7 +467,9 @@ export function popupWindowOptions(dir: string): { width: number; height: number
 - **`nodeIntegrationInSubFrames: true` on page views** (`PAGE_WEB_PREFERENCES`), so the per-session frame preload (passkey fail-fast) also runs in iframes. Page views stay sandboxed with context isolation, and the preload exposes nothing to pages.
 - **Hidden profiles are muted (R5):** a hidden profile's live tab views keep running but are muted until the profile is shown again.
 - **Bookmarks and history (added later):** see `docs/superpowers/plans/2026-11-19-bookmarks-history.md` and `docs/superpowers/specs/2026-11-19-bookmarks-history-design.md`. This supersedes the non-goal of importing history and bookmarks. Controller rulings during that work that differ from the plan's text:
-  - the "Other Bookmarks" and "Mobile Bookmarks" wrapper folders are created only when something is added to them (bookmarks-bar items go at the top level);
+  - a folder the import would create (a Chrome folder, or the "Other Bookmarks" / "Mobile Bookmarks" wrapper) is created only when at least one bookmark is added inside it, so empty Chrome folders aren't imported and re-importing doesn't recreate a folder the user renamed or deleted (bookmarks-bar items go at the top level);
+  - Ruling A: inline completion also completes a typed path prefix (`acme.atlassian.net/ji` → `acme.atlassian.net/jira/software`), beyond the spec's host-only rule. Matching ignores case, but the completion keeps the stored case of the path and query (only the host is lowercased), so Enter opens a working URL;
+  - an import whose Chrome History or bookmarks file exists but can't be read marks that part failed: its summary line says so ("…; history couldn't be read — try again."), the sheet is a warning, and its title is "No bookmarks or history were imported." when every profile failed outright. A -wal/-journal that Chrome removes mid-copy counts as absent;
   - history `page()` never splits rows with equal times across pages;
   - only real corruption sets `history.db` aside;
   - inline rename commits only on Enter (blur, Esc and a profile change cancel it);

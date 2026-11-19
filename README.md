@@ -36,6 +36,7 @@ You can repeat the import any time from the **Profiles** menu:
 - **Import Logins from Chrome**: the shown profile only.
 - **Import Logins for All Profiles**.
 - **Replace Logins from Chrome…**: overwrites the shown profile's logins with Chrome's current ones, after a confirmation.
+- **Import Bookmarks and History from Chrome**: every visible profile's bookmarks and history (see below).
 
 A normal import only adds logins Superbrowser doesn't have yet. It never signs you out. Superbrowser never writes to Chrome's files or its Keychain item.
 
@@ -43,10 +44,12 @@ A normal import only adds logins Superbrowser doesn't have yet. It never signs y
 
 **Profiles ▸ Import Bookmarks and History from Chrome** (also in the "+" menu) imports every visible profile's bookmarks and the last 90 days of its history. It is separate from the logins import and needs no Keychain access.
 
-- Bookmarks come from each profile's `Bookmarks` and `AccountBookmarks` files, merged without duplicates, with the bookmarks bar at the top level and the rest in "Other Bookmarks" and "Mobile Bookmarks" folders. Only http and https addresses are kept.
-- It only adds. Running it again adds nothing already there, and it never changes Chrome.
+- Bookmarks come from each profile's `Bookmarks` and `AccountBookmarks` files, merged without duplicates, with the bookmarks bar at the top level and the rest in "Other Bookmarks" and "Mobile Bookmarks" folders. Only http and https addresses are kept. A folder is created only when at least one bookmark is added to it, so empty Chrome folders aren't imported.
+- It only adds. Running it again adds nothing already there (each line reads "0 bookmarks, 0 pages of history imported (N skipped)."), doesn't bring back a folder you renamed or deleted, and never changes Chrome.
+- If a profile's history or bookmarks file can't be read (Chrome may be busy writing it), the summary is a warning and that line says so, for example "Personal: 175 bookmarks imported; history couldn't be read — try again." The rest still imports.
 - Superbrowser then records your own browsing in each profile's history. Address suggestions and the History and Bookmarks panels use it, one profile at a time.
 - **Bookmarks ▸ Bookmark This Page** (⌘D) adds the shown page. **History ▸ Clear History…** clears the shown profile's history after a confirmation.
+- Right-click ▸ **Delete from History** in the History panel removes every visit to that page, not just the row clicked.
 
 ## Shortcuts
 
@@ -181,14 +184,14 @@ Walk this list on the installed app after a change that affects it.
 
 **Bookmarks and history**
 
-34. **Profiles ▸ Import Bookmarks and History from Chrome**: no Keychain prompt and no tab reload. One sheet lists a line per visible profile, such as "Personal: 175 bookmarks, 12,685 pages of history imported (3 skipped).". Run it again: every line reports 0 imported. It also works while Chrome is running, and Chrome's bookmarks and history are unchanged afterwards. The "+" menu has the same item.
+34. **Profiles ▸ Import Bookmarks and History from Chrome**: no Keychain prompt and no tab reload. One sheet lists a line per visible profile, such as "Personal: 175 bookmarks, 12,685 pages of history imported (3 skipped).". Run it again: every line reads "0 bookmarks, 0 pages of history imported (N skipped).". It also works while Chrome is running, and Chrome's bookmarks and history are unchanged afterwards. The "+" menu has the same item.
 35. On first run (see Login import), the question reads "Import your logins, bookmarks and history from Chrome for all profiles?". **Import All** runs the logins import, then this one with its own summary. Cancelling the logins explanation still imports bookmarks and history.
-36. Click the address field and type part of a page title or host. At most 6 rows appear under the field with stars on bookmarks and "Search Google for …" last. Enter with no row selected goes to what you typed. Arrow keys move through rows, Up past the first restores your text, and Esc restores the address and closes the list. A host completes inline, and Backspace removes the completion. ⌃2 closes the list, and then only that profile's pages are suggested.
+36. Click the address field and type part of a page title or host. At most 6 rows appear under the field with stars on bookmarks and "Search Google for …" last. Enter with no row selected goes to what you typed. Arrow keys move through rows, Up past the first restores your text, and Esc restores the address and closes the list. A host completes inline, and Backspace removes the completion. A completion that runs into a path keeps its capitals (try a Google Docs link: Enter opens the document). ⌃2 closes the list, and then only that profile's pages are suggested.
 37. Browse in one profile: open A, click through to B, reload B, go Back, then type a new address C. Only visits are recorded (not reload or Back as new visits). Reopening a closed tab with ⇧⌘T adds no visit. Another profile's History panel doesn't show these pages.
-38. ⌘Y turns the sidebar into History with the search box focused. Rows are grouped by Today, Yesterday and dates, each with its time and host. Typing "ho so" finds Vietnamese titles such as "Hồ sơ…". Scrolling to the bottom loads older days. A click opens the page in the current tab and ⌘-click in a new tab. Right-click ▸ **Delete from History** removes the row and the suggestion. Esc, ✕ or ⌘Y closes the panel, and Downloads stay visible.
+38. ⌘Y turns the sidebar into History with the search box focused. Rows are grouped by Today, Yesterday and dates, each with its time and host. Typing "ho so" finds Vietnamese titles such as "Hồ sơ…". Scrolling to the bottom loads older days. A click opens the page in the current tab and ⌘-click in a new tab. Right-click ▸ **Delete from History** removes every visit to that page (all its rows, on every day) and its suggestion. Esc, ✕ or ⌘Y closes the panel, and Downloads stay visible.
 39. ⌥⌘B shows the imported folders. Click a folder to open or close it; an unnamed folder shows "Untitled". Searching shows a flat list with folder paths. Right-click a bookmark: Open in New Tab, Copy Link, Rename…, Move to ▸, Delete. Right-click a folder: New Folder…, Rename…, Delete (a non-empty folder asks first). In Rename, Enter saves and Esc or clicking away cancels.
 40. ⌘D on a page opens Bookmarks with the new bookmark highlighted at the top. ⌘D again highlights it and adds no duplicate. ⌘D on a new tab page adds nothing. With a popup focused, ⌘Y, ⌥⌘B and ⌘D act on the main window.
-41. With the sidebar hidden (⌘S), ⌘Y and ⌥⌘B show the sidebar first. With the History panel open and the sidebar hidden, switch profile, then show the sidebar: only the first page of history loads, and more loads as you scroll.
+41. With the sidebar hidden (⌘S), ⌘Y and ⌥⌘B show the sidebar first, with the panel open, even if that panel was open when the sidebar was hidden. With the History panel open and the sidebar hidden, switch profile, then show the sidebar: only the first page of history loads, and more loads as you scroll.
 42. With a panel open, ⌃2 empties and refills it with that profile's data and keeps the search text. **History ▸ Clear History…** asks "Clear all history for <profile>?". Cancel keeps it, and Clear empties only that profile's history (another profile's suggestions still work).
 
 ## Privacy
