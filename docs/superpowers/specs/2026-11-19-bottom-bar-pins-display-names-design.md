@@ -1,6 +1,6 @@
 # Bottom bar: easier profile pills, display names, pinned tabs
 
-Date: 2026-11-19. Status: draft for approval.
+Date: 2026-11-19. Status: implemented.
 
 ## Why
 
@@ -194,3 +194,9 @@ layouts). Check that `⌥⌘` digits don't clash with an existing accelerator (n
 - How pills and pins share width when the bar overflows (neither may disappear entirely).
 - Whether a favicon-less tile shows a placeholder or the site's first letter.
 - Names of new IPC channels, helper functions and the exact `UiState` shape.
+
+## Deviations during execution
+
+- The Tab menu has one checkbox item "Pinned to Bar" instead of "Pin Tab to Bar / Unpin Tab from Bar" labels: Electron can't relabel a built menu item without rebuilding the application menu on every tab change. (The tab's context menu does say Pin to Bar / Unpin from Bar.)
+- Bar overflow: pills keep a min-width of 42 px, pins 38 px, and pins shrink first (`flex-shrink: 1000`). The pin group is hidden when empty; the Pinned Tabs submenu shows a disabled "No Pinned Tabs" when empty.
+- The inline display-name editor replaces the pill button with a non-button holder while editing (a text field inside a `<button>` would turn Space/Enter into clicks). After a click on another pill mid-edit, the save is sent at once and the pill comes back after the mouse is released so the click lands.

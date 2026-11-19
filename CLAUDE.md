@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-Superbrowser is a macOS (Apple Silicon) browser built with Electron + TypeScript. It shows every Chrome profile in one window: an Arc-style sidebar holds the current profile's tabs, and a bottom profile bar switches profile (click or ⌃1…⌃9). Each Chrome profile gets its own Electron session partition. Logins can be imported from Chrome's cookies. README.md covers install, behaviour, known limits and the manual end-to-end checklist ("Verify it works"). v1 (a Swift app that stacked real Chrome windows, plus a helper extension) was retired and lives only in git history.
+Superbrowser is a macOS (Apple Silicon) browser built with Electron + TypeScript. It shows every Chrome profile in one window: an Arc-style sidebar holds the current profile's tabs, and a bottom bar holds profile pills (click or ⌃1…⌃9 to switch) and, at its right, pinned tabs from any profile (⌥⌘1…⌥⌘9). Each Chrome profile gets its own Electron session partition. Logins can be imported from Chrome's cookies. README.md covers install, behaviour, known limits and the manual end-to-end checklist ("Verify it works"). v1 (a Swift app that stacked real Chrome windows, plus a helper extension) was retired and lives only in git history.
 
 ## Commands
 
@@ -24,7 +24,8 @@ scripts/make-icon.sh              # resources/Superbrowser.png → resources/ico
 ## Architecture
 
 - **`src/core/`**: pure logic, unit-tested under plain Node. It must **never import `electron`**. Covers:
-  - address parsing, UA/client hints, Chrome profile parsing and merging;
+  - address parsing, UA/client hints, Chrome profile parsing and merging, display names and initials (`profiles.ts`);
+  - pinned tabs (`pins.ts`): keys `dir|host`, add/remove/move, decode, which tab a pin shows, remembered tab, favicon;
   - state decode and atomic store, the tab model, layout maths, drag-to-reorder slot maths (`dragOrder.ts`) and keyed row reordering with fewest moves (`reorder.ts`);
   - cookie decryption and import planning, the permission policy and prompt queue;
   - download names and the per-profile downloads list, context-menu spec, popup titles, UI command validation (`uiProtocol.ts`), sidebar sections and the ⌘Y/⌥⌘B/⌘D decision (`sections.ts`), a trailing-edge throttle (`throttle.ts`);
@@ -43,7 +44,7 @@ scripts/make-icon.sh              # resources/Superbrowser.png → resources/ico
   - `historyRecorder.ts`: records visits from tab navigation events. `main.ts` turns each visit or title recorded in the shown profile into a throttled `IPC.historyRecorded` notice; an open History section at the top, not searching, refetches its first page. `libraryChanged` (edits, deletes, clears, imports) still reloads open sections unconditionally.
   - `libraryImport.ts`: copies Chrome's files to a temp dir and imports bookmarks and history (add-only).
 - **`src/preload/`**: `ui.ts` (contextBridge API for our UI pages) and `frame.ts` (per-session frame preload: passkey requests fail fast, `navigator.userAgentData` names Google Chrome).
-- **`src/ui/`**: the sidebar + bottom bar page (`index.html`, `ui.ts`) and the find bar (`find.html`, `find.ts`). Our own pages; CSP forbids inline styles/scripts. `src/ui/parts/` holds UI helper modules (`suggestions.ts`, `bookmarksSection.ts` and `historySection.ts` for the collapsible sections right under the tabs, `libraryRows.ts` for their shared rows, `profileDrag.ts` for dragging profile pills, `dom.ts`) bundled into `ui.ts`; only `src/ui/*.ts` are entry points.
+- **`src/ui/`**: the sidebar + bottom bar page (`index.html`, `ui.ts`) and the find bar (`find.html`, `find.ts`). Our own pages; CSP forbids inline styles/scripts. `src/ui/parts/` holds UI helper modules (`suggestions.ts`, `bookmarksSection.ts` and `historySection.ts` for the collapsible sections right under the tabs, `libraryRows.ts` for their shared rows, `profileBar.ts` for the pills and inline display-name edit, `pinBar.ts` for the pin tiles, `profileDrag.ts` for dragging profile pills, `dom.ts`) bundled into `ui.ts`; only `src/ui/*.ts` are entry points.
 - **`src/shared/types.ts`**: types and IPC channel names shared by main, preload and UI.
 
 New logic belongs in `src/core` with a test; keep `src/main` to wiring. Tests sit next to sources as `*.test.ts` (`node:test` + `node:assert/strict`). Imports between TS files use explicit `.ts` extensions (`import { x } from './profiles.ts'`) and only erasable TS syntax (no `enum`, `namespace` or constructor parameter properties). Node runs the tests by type stripping.
@@ -87,6 +88,8 @@ Popups are separate small windows (registered in `pages.ts`, `isPopupWindow`). T
 - **Lazy restore:** after launch, only each visible profile's active tab loads: the shown one at once, the others hidden, 300 ms apart (`loadActiveTabs`). Other tabs, and hidden profiles' tabs, load when first shown. Within a run, tabs are never unloaded, and switching tab or profile never reloads.
 - **Closing tabs:** a tab closes through `webContents.close({ waitForBeforeUnload: true })` and leaves the model only when its page is destroyed, so "Stay" on the "Leave site?" sheet (`will-prevent-unload`, in `wirePage`) keeps it. After a page is destroyed Electron drops the view's `webContents` (it reads `undefined`): go through `openContents(view)`. Nothing that runs while the window closes may change the saved tabs.
 - **State saves:** the store writes at most 2 s after the first unsaved change, however often `save` is called; tab events that change nothing saved (loading, favicons) don't save.
+- **Display names:** live only in `state.displayNames`; Chrome's profile names are never written.
+- **Pins:** a pin carries its own `dir` and opens only in that profile (through the normal per-profile tab path).
 - **Hidden profiles:** their tab views keep running but are muted (`setAudioMuted`) while hidden.
 
 ## Docs
