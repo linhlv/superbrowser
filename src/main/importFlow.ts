@@ -1,5 +1,5 @@
 import { dialog, type BrowserWindow } from 'electron';
-import { librarySummaryLine } from '../core/chromeLibrary.ts';
+import { libraryImportOutcome, librarySummaryLine, type LibraryImportResult } from '../core/chromeLibrary.ts';
 import type { ImportMode, ImportResult } from '../core/cookies.ts';
 import type { Profile } from '../shared/types.ts';
 import { ImportError, LoginImporter } from './importer.ts';
@@ -93,22 +93,23 @@ export class ImportFlow {
       const profiles = this.deps.visibleProfiles();
       if (profiles.length === 0) return;
       const lines: string[] = [];
-      let failures = 0;
-      let changed = false;
+      const results: (LibraryImportResult | null)[] = []; // null: that profile's import threw
       for (const profile of profiles) {
+        await new Promise((resolve) => setImmediate(resolve)); // each profile reads synchronously: let the UI paint between them
         try {
           const r = await this.libraryImporter.importProfile(profile.dir);
-          if (r.bookmarks.added > 0 || r.history.added > 0) changed = true;
+          results.push(r);
           lines.push(librarySummaryLine(profile.name, r));
         } catch (e) {
-          failures++;
+          results.push(null);
           lines.push(`${profile.name}: ${e instanceof Error ? e.message : String(e)}`);
           this.deps.log(`importing bookmarks and history of ${profile.dir} failed: ${String(e)}`);
         }
       }
-      // A failed profile may have saved its bookmarks before its history failed: refresh then too.
-      if (changed || failures > 0) this.deps.libraryChanged();
-      await this.sheet(failures > 0 ? 'warning' : 'info', 'Imported bookmarks and history from Chrome.', lines.join('\n'));
+      // A profile that threw may have saved its bookmarks before its history failed: refresh then too.
+      if (results.some((r) => r === null || r.bookmarks.added > 0 || r.history.added > 0)) this.deps.libraryChanged();
+      const outcome = libraryImportOutcome(results);
+      await this.sheet(outcome.warning ? 'warning' : 'info', outcome.title, lines.join('\n'));
     });
   }
 

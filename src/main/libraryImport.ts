@@ -19,6 +19,8 @@ export type LibraryImporterOptions = {
   /** Defaults to Chrome's real data dir (read-only). */
   chromeDir?: string;
   now?: () => number;
+  /** Copies one Chrome file to the temp dir; tests replace it. Defaults to `fs.copyFileSync`. */
+  copyFile?: (from: string, to: string) => void;
 };
 
 const BOOKMARK_FILES = ['Bookmarks', 'AccountBookmarks'];
@@ -35,17 +37,19 @@ export class LibraryImporter {
   private readonly log: (msg: string) => void;
   private readonly chromeDir: string;
   private readonly now: () => number;
+  private readonly copyFile: (from: string, to: string) => void;
 
   constructor(opts: LibraryImporterOptions) {
     this.library = opts.library;
     this.log = opts.log;
     this.chromeDir = opts.chromeDir ?? CHROME_DIR;
     this.now = opts.now ?? Date.now;
+    this.copyFile = opts.copyFile ?? ((from, to) => fs.copyFileSync(from, to));
   }
 
   /**
-   * A missing Chrome file counts as zero; an unreadable one is logged and counts as zero, and the other parts
-   * still import. Throws only when Superbrowser's own library can't be written.
+   * A missing Chrome file counts as zero. An unreadable one is logged and its part is marked `failed`; the
+   * other parts still import. Throws only when Superbrowser's own library can't be written.
    */
   async importProfile(dir: string): Promise<LibraryImportResult> {
     const source = path.join(this.chromeDir, dir);
@@ -64,22 +68,27 @@ export class LibraryImporter {
 
   private importBookmarks(dir: string, source: string, tmp: string, now: number): LibraryImportResult['bookmarks'] {
     const files: ChromeBookmarks[] = [];
+    let failed = false;
     for (const name of BOOKMARK_FILES) {
       try {
-        const copy = copyIfPresent(source, tmp, name);
+        const copy = this.copyIfPresent(source, tmp, name);
         if (copy === null) continue;
         const parsed = parseChromeBookmarks(fs.readFileSync(copy, 'utf8'));
         if (parsed) files.push(parsed);
-        else this.log(`profile ${dir}: Chrome's ${name} is unparsable; skipped`);
+        else {
+          failed = true;
+          this.log(`profile ${dir}: Chrome's ${name} is unparsable; skipped`);
+        }
       } catch (e) {
+        failed = true;
         this.log(`profile ${dir}: reading Chrome's ${name} failed: ${message(e)}`);
       }
     }
-    let result = { added: 0, skipped: 0 };
+    let result = { added: 0, skipped: 0, failed };
     if (files.length === 0) return result;
     this.library.updateBookmarks(dir, (tree) => {
       const merged = mergeChrome(tree, files, now);
-      result = { added: merged.added, skipped: merged.skipped };
+      result = { added: merged.added, skipped: merged.skipped, failed };
       return merged.added > 0 ? merged.tree : tree;
     });
     return result;
@@ -91,12 +100,12 @@ export class LibraryImporter {
       rows = this.readVisits(source, tmp);
     } catch (e) {
       this.log(`profile ${dir}: reading Chrome's History failed: ${message(e)}`);
-      rows = [];
+      return { pages: 0, added: 0, skipped: 0, failed: true };
     }
     const mapped = mapChromeVisits(rows, now);
-    if (mapped.visits.length === 0) return { pages: 0, added: 0, skipped: mapped.skipped };
+    if (mapped.visits.length === 0) return { pages: 0, added: 0, skipped: mapped.skipped, failed: false };
     const r = this.library.history(dir).importVisits(mapped.visits);
-    return { pages: r.pages, added: r.added, skipped: mapped.skipped + r.skipped };
+    return { pages: r.pages, added: r.added, skipped: mapped.skipped + r.skipped, failed: false };
   }
 
   /**
@@ -104,10 +113,10 @@ export class LibraryImporter {
    * copied WAL (or rolls back the copied journal) into the copy; the original is never opened.
    */
   private readVisits(source: string, tmp: string): ChromeVisitRow[] {
-    const copy = copyIfPresent(source, tmp, 'History');
+    const copy = this.copyIfPresent(source, tmp, 'History');
     if (copy === null) return [];
-    copyIfPresent(source, tmp, 'History-wal');
-    copyIfPresent(source, tmp, 'History-journal');
+    this.copyIfPresent(source, tmp, 'History-wal');
+    this.copyIfPresent(source, tmp, 'History-journal');
     const db = new DatabaseSync(copy);
     try {
       return db.prepare(VISITS_SQL).all().map((r) => ({
@@ -121,15 +130,21 @@ export class LibraryImporter {
       db.close();
     }
   }
-}
 
-/** Copies `<source>/<name>` into `tmp`; null when Chrome has no such file. */
-function copyIfPresent(source: string, tmp: string, name: string): string | null {
-  const from = path.join(source, name);
-  if (!fs.existsSync(from)) return null;
-  const to = path.join(tmp, name);
-  fs.copyFileSync(from, to);
-  return to;
+  /**
+   * Copies `<source>/<name>` into `tmp`; null when Chrome has no such file. Chrome may remove a -wal or
+   * -journal at any moment, so a file that is gone by the time it is copied counts as absent too.
+   */
+  private copyIfPresent(source: string, tmp: string, name: string): string | null {
+    const to = path.join(tmp, name);
+    try {
+      this.copyFile(path.join(source, name), to);
+    } catch (e) {
+      if ((e as { code?: unknown } | null)?.code === 'ENOENT') return null;
+      throw e;
+    }
+    return to;
+  }
 }
 
 function message(e: unknown): string {

@@ -12,9 +12,10 @@ export type ChromeBookmarks = { bar: ChromeNode[]; other: ChromeNode[]; mobile: 
 export type ChromeVisitRow = { url: string; title: string; typed_count: number; hidden: number; visit_time: string };
 /** `time` is ms since 1970. */
 export type ImportVisit = { url: string; title: string; typedCount: number; time: number };
+/** `failed`: a Chrome file was there but couldn't be read (a missing file isn't a failure). */
 export type LibraryImportResult = {
-  bookmarks: { added: number; skipped: number };
-  history: { pages: number; added: number; skipped: number };
+  bookmarks: { added: number; skipped: number; failed: boolean };
+  history: { pages: number; added: number; skipped: number; failed: boolean };
 };
 
 /** Chrome time (µs since 1601) to ms since 1970. Junk or non-positive input gives 0. */
@@ -22,7 +23,7 @@ export function chromeTimeToMs(t: string | number): number {
   try {
     const us = typeof t === 'number' ? BigInt(Math.trunc(t)) : BigInt(t.trim());
     if (us <= 0n) return 0;
-    return Number(us / 1000n) - CHROME_EPOCH_OFFSET_MS;
+    return Math.max(0, Number(us / 1000n) - CHROME_EPOCH_OFFSET_MS);
   } catch {
     return 0;
   }
@@ -67,11 +68,39 @@ export function mapChromeVisits(rows: ChromeVisitRow[], nowMs: number, retention
   return { visits, skipped };
 }
 
+/**
+ * "Personal: 175 bookmarks, 12,685 pages of history imported (3 skipped)." A part that couldn't be read is
+ * named instead of counted: "Personal: 175 bookmarks imported; history couldn't be read — try again."
+ */
 export function librarySummaryLine(profileName: string, r: LibraryImportResult): string {
   const n = (v: number) => v.toLocaleString('en-US');
   const b = r.bookmarks.added;
   const p = r.history.pages;
+  // Failed bookmarks are still counted when one of Bookmarks/AccountBookmarks was read. Failed history read nothing.
+  const someBookmarks = b + r.bookmarks.skipped > 0;
+  const counted: string[] = [];
+  if (!r.bookmarks.failed || someBookmarks) counted.push(`${n(b)} ${b === 1 ? 'bookmark' : 'bookmarks'}`);
+  if (!r.history.failed) counted.push(`${n(p)} ${p === 1 ? 'page' : 'pages'} of history`);
+  const unread: string[] = [];
+  if (r.bookmarks.failed) unread.push(someBookmarks ? 'some bookmarks' : 'bookmarks');
+  if (r.history.failed) unread.push('history');
   const skipped = r.bookmarks.skipped + r.history.skipped;
-  return `${profileName}: ${n(b)} ${b === 1 ? 'bookmark' : 'bookmarks'}, ${n(p)} ${p === 1 ? 'page' : 'pages'} of history imported`
-    + (skipped > 0 ? ` (${n(skipped)} skipped).` : '.');
+  const imported = counted.length === 0 ? '' : `${counted.join(', ')} imported` + (skipped > 0 ? ` (${n(skipped)} skipped)` : '');
+  const failed = unread.length === 0 ? '' : `${unread.join(' and ')} couldn't be read — try again.`;
+  if (!failed) return `${profileName}: ${imported}.`;
+  return `${profileName}: ${imported ? `${imported}; ` : ''}${failed}`;
+}
+
+/**
+ * The sheet after importing every profile's bookmarks and history; `null` is a profile whose import threw.
+ * A warning when anything failed; the title says nothing was imported when every profile failed outright.
+ */
+export function libraryImportOutcome(results: (LibraryImportResult | null)[]): { warning: boolean; title: string } {
+  const failedOutright = (r: LibraryImportResult | null) =>
+    r === null || (r.bookmarks.failed && r.history.failed && r.bookmarks.added === 0 && r.history.added === 0);
+  const warning = results.some((r) => r === null || r.bookmarks.failed || r.history.failed);
+  const title = results.length > 0 && results.every(failedOutright)
+    ? 'No bookmarks or history were imported.'
+    : 'Imported bookmarks and history from Chrome.';
+  return { warning, title };
 }

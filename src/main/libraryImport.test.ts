@@ -1,9 +1,9 @@
 import { test, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { basename, join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { flattenBookmarks } from '../core/bookmarks.ts';
 import { HistoryDb } from '../core/history.ts';
@@ -85,7 +85,7 @@ const historyUrls = (db: HistoryDb) => db.candidates(['test'], 50).map((e) => e.
 test('imports bookmarks from both files and history visits', async () => {
   writeFixture();
   const r = await importer.importProfile('Default');
-  assert.deepEqual(r, { bookmarks: { added: 5, skipped: 0 }, history: { pages: 3, added: 4, skipped: 3 } });
+  assert.deepEqual(r, { bookmarks: { added: 5, skipped: 0, failed: false }, history: { pages: 3, added: 4, skipped: 3, failed: false } });
   assert.deepEqual(flattenBookmarks(library.updateBookmarks('Default', (t) => t).nodes).map((b) => b.url).sort(),
     ['https://a.test/', 'https://b.test/', 'https://c.test/', 'https://d.test/', 'https://e.test/']);
   assert.deepEqual(historyUrls(library.history('Default')), ['https://mail.test/', 'https://news.test/', 'https://recent.test/']);
@@ -115,12 +115,12 @@ test('a second import adds nothing', async () => {
 
 test('missing files count as zero', async () => {
   mkdirSync(join(chromeDir, 'Profile 1'));
-  const zero = { bookmarks: { added: 0, skipped: 0 }, history: { pages: 0, added: 0, skipped: 0 } };
+  const zero = { bookmarks: { added: 0, skipped: 0, failed: false }, history: { pages: 0, added: 0, skipped: 0, failed: false } };
   assert.deepEqual(await importer.importProfile('Profile 1'), zero);
   assert.deepEqual(await importer.importProfile('Profile 9'), zero); // no profile dir at all
 });
 
-test('an unreadable file is logged and the other parts still import', async () => {
+test('an unreadable file is logged, flagged as failed, and the other parts still import', async () => {
   writeFixture();
   writeFileSync(join(profileDir, 'AccountBookmarks'), '{ not json');
   writer?.close();
@@ -129,9 +129,51 @@ test('an unreadable file is logged and the other parts still import', async () =
   rmSync(join(profileDir, 'History-wal'), { force: true });
   rmSync(join(profileDir, 'History-shm'), { force: true });
   const r = await importer.importProfile('Default');
-  assert.deepEqual(r, { bookmarks: { added: 4, skipped: 0 }, history: { pages: 0, added: 0, skipped: 0 } });
+  assert.deepEqual(r, { bookmarks: { added: 4, skipped: 0, failed: true }, history: { pages: 0, added: 0, skipped: 0, failed: true } });
   assert.ok(logs.some((m) => m.includes('AccountBookmarks')), logs.join('\n'));
   assert.ok(logs.some((m) => m.includes('History')), logs.join('\n'));
+});
+
+test('an unreadable History alone fails history only; bookmarks still import', async () => {
+  writeFixture();
+  writer?.close();
+  writer = null;
+  writeFileSync(join(profileDir, 'History'), 'not a database, just text that is long enough to be read');
+  rmSync(join(profileDir, 'History-wal'), { force: true });
+  rmSync(join(profileDir, 'History-shm'), { force: true });
+  const r = await importer.importProfile('Default');
+  assert.deepEqual(r, { bookmarks: { added: 5, skipped: 0, failed: false }, history: { pages: 0, added: 0, skipped: 0, failed: true } });
+});
+
+test('a sidecar that vanishes between listing and copying counts as absent', async () => {
+  writeFixture();
+  writeFileSync(join(profileDir, 'History-journal'), ''); // Chrome removes it while we copy
+  const copied: string[] = [];
+  importer = new LibraryImporter({
+    library, log: (m) => logs.push(m), chromeDir, now: () => NOW,
+    copyFile: (from, to) => {
+      if (basename(from) === 'History-journal') throw Object.assign(new Error(`ENOENT: no such file, copyfile '${from}'`), { code: 'ENOENT' });
+      copied.push(basename(from));
+      copyFileSync(from, to);
+    },
+  });
+  const r = await importer.importProfile('Default');
+  assert.deepEqual(r.history, { pages: 3, added: 4, skipped: 3, failed: false });
+  assert.ok(copied.includes('History-wal'));
+});
+
+test('a copy that fails for another reason fails that part', async () => {
+  writeFixture();
+  importer = new LibraryImporter({
+    library, log: (m) => logs.push(m), chromeDir, now: () => NOW,
+    copyFile: (from, to) => {
+      if (basename(from) === 'History-wal') throw Object.assign(new Error('EACCES: permission denied'), { code: 'EACCES' });
+      copyFileSync(from, to);
+    },
+  });
+  const r = await importer.importProfile('Default');
+  assert.equal(r.history.failed, true);
+  assert.equal(r.bookmarks.added, 5);
 });
 
 test('Chrome\'s files are unchanged', async () => {
