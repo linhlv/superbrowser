@@ -52,9 +52,10 @@ body.collapsed #side { display: none; }
    2 × (8 + 88), Downloads 8 + 20% (82) = 390, so nothing spills onto the profile bar. */
 #side:has(.sec.open) #tabs { flex: 0 1 auto; max-height: 50%; min-height: 64px; }
 
-/* Bookmarks and History sections under the tabs: a folded one is just its header; open ones share the free height
+/* Bookmarks and History sections above the tabs (under the address field): a folded one is just its header; open ones share the free height
    and their lists scroll inside them. */
 .sec { flex: none; display: flex; flex-direction: column; margin-top: 8px; }
+#sec-bookmarks { margin-top: 12px; }
 .sec.open { flex: 1 1 0; min-height: 88px; }
 .sec-h {
   display: flex; align-items: center; gap: 4px; width: 100%; padding: 4px 8px; border: 0; border-radius: 6px; background: none;
@@ -84,7 +85,7 @@ body.collapsed #side { display: none; }
 .bm-kids[hidden] { display: none; }
 .bm-edit { width: 100%; padding: 1px 4px; border: 0; border-radius: 4px; background: #fff; color: #111; font: inherit; outline: none; }
 
-/* Downloads: newest first, under the tabs; only while the list has something */
+/* Downloads: newest first, at the bottom under the tabs; only while the list has something */
 #downloads { flex: none; max-height: 35%; display: flex; flex-direction: column; margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,.15); }
 #downloads[hidden] { display: none; }
 #side:has(.sec.open) #downloads { max-height: 20%; }

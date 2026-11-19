@@ -32,9 +32,10 @@ History become two collapsible sections under the tabs in the sidebar.
 
 ## Design
 
-- **Layout, top to bottom:** tabs (with New Tab) · **Bookmarks** section ·
-  **History** section · Downloads (unchanged). The tab list is never hidden any
-  more; the panel's ✕ button goes away.
+- **Layout, top to bottom:** address field · **Bookmarks** section ·
+  **History** section · tabs (with New Tab) · Downloads (unchanged). The tab
+  list is never hidden any more; the panel's ✕ button goes away. (First built
+  with the sections under the tabs; moved above them at the user's request.)
 - **Section header:** one line, `▸ BOOKMARKS` / `▾ HISTORY` in the existing
   small-caps header style; clicking it opens or folds the section. A folded
   section is just its header.
