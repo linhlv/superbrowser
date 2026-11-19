@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-Superbrowser is a macOS (Apple Silicon) browser built with Electron + TypeScript. It shows every Chrome profile in one window: an Arc-style sidebar holds the current profile's tabs, and a bottom bar holds profile pills (click or ⌃1…⌃9 to switch) and, at its right, pinned tabs from any profile (⌥⌘1…⌥⌘9). Each Chrome profile gets its own Electron session partition. Logins can be imported from Chrome's cookies. README.md covers install, behaviour, known limits and the manual end-to-end checklist ("Verify it works"). v1 (a Swift app that stacked real Chrome windows, plus a helper extension) was retired and lives only in git history.
+Superbrowser is a macOS (Apple Silicon) browser built with Electron + TypeScript. It shows every Chrome profile in one window: a toolbar strip above the page holds back/forward/reload and the address field, an Arc-style sidebar holds the current profile's tabs, and a bottom bar holds profile pills (click or ⌃1…⌃9 to switch) and, at its right, pinned tabs from any profile (⌥⌘1…⌥⌘9). Each Chrome profile gets its own Electron session partition. Logins can be imported from Chrome's cookies. README.md covers install, behaviour, known limits and the manual end-to-end checklist ("Verify it works"). v1 (a Swift app that stacked real Chrome windows, plus a helper extension) was retired and lives only in git history.
 
 ## Commands
 
@@ -27,23 +27,24 @@ scripts/make-icon.sh              # resources/Superbrowser.png → resources/ico
   - address parsing, UA/client hints, Chrome profile parsing and merging, display names and initials (`profiles.ts`);
   - readable colours (`colors.ts`): WCAG luminance/contrast, `readableTint` (darkens a light profile colour for the window tint so white text reads) and `textOn` (avatar initials colour);
   - pinned tabs (`pins.ts`): keys `dir|host`, add/remove/move, decode, which tab a pin shows, remembered tab, favicon;
-  - state decode and atomic store, the tab model, layout maths, drag-to-reorder slot maths (`dragOrder.ts`) and keyed row reordering with fewest moves (`reorder.ts`);
+  - state decode and atomic store, the tab model, layout maths (`layout.ts`: page, toolbar and find bar bounds), drag-to-reorder slot maths (`dragOrder.ts`) and keyed row reordering with fewest moves (`reorder.ts`);
   - cookie decryption and import planning, the permission policy and prompt queue;
   - download names and the per-profile downloads list, context-menu spec, popup titles, UI command validation (`uiProtocol.ts`), sidebar sections and the ⌘Y/⌥⌘B/⌘D decision (`sections.ts`), a trailing-edge throttle (`throttle.ts`);
   - bookmarks and history: the bookmark tree (`bookmarks.ts`, `bookmarkStore.ts`), history queries and retention (`history.ts`), visit recording rules (`visits.ts`), accent-insensitive matching (`searchText.ts`), address-bar suggestions (`suggest.ts`), parsing Chrome's `Bookmarks`/`AccountBookmarks`/`History` and import planning (`chromeLibrary.ts`), bookmark and history context menus (`libraryMenus.ts`). `address.ts` also has `isWebUrl` and `googleSearchUrl`; `store.ts` has `writeFileAtomic`.
 - **`src/main/`**: thin Electron adapters wired together in `main.ts`:
   - `sessions.ts`: per-profile session, UA, permissions, frame preload, downloads.
-  - `tabManager.ts`: one `WebContentsView` per tab, lazy restore, muting.
-  - `browserWindow.ts`: window, UI view, find bar, layout.
+  - `tabManager.ts`: one `WebContentsView` per tab, lazy restore, muting; `showTab`/`showNewTab`/`tabsOf`/`faviconOf`/`titleOf` for pins; `onFullScreen` when a page enters or leaves HTML full screen.
+  - `browserWindow.ts`: window, UI view, toolbar view (`Toolbar`), find bar, layout.
   - `pages.ts`: new windows, popups, context menu.
   - `profileManager.ts`: order (applies core `moveProfile`/`placeProfile`), hide/unhide, pill menu (incl. Set Display Name…).
   - `importer.ts` and `importFlow.ts`: login import and its sheets.
-  - `menu.ts`: the application menu and every shortcut. It is the source of truth for shortcuts.
+  - `menu.ts`: the application menu and every shortcut (it is the source of truth for shortcuts), plus the pill, sidebar-tab and pin-tile right-click menus.
   - `chrome.ts`: reads Chrome's `Local State`; opens a profile in Chrome.
   - `downloads.ts`.
   - `library.ts`: `Library`, the only access to each profile's `history.db` (`node:sqlite`) and `bookmarks.json`.
   - `historyRecorder.ts`: records visits from tab navigation events. `main.ts` turns each visit or title recorded in the shown profile into a throttled `IPC.historyRecorded` notice; an open History section at the top, not searching, refetches its first page. `libraryChanged` (edits, deletes, clears, imports) still reloads open sections unconditionally.
   - `libraryImport.ts`: copies Chrome's files to a temp dir and imports bookmarks and history (add-only).
+  - `main.ts` also wires pins: remembered tabs per pin (`rememberShown`, per run only), the pin's icon and title following its tab, and a pin click (`pinTarget`, then `showTab` or `showNewTab`), plus the toolbar's commands (suggestions, its height, a click passed through to the page).
 - **`src/preload/`**: `ui.ts` (contextBridge API for our UI pages) and `frame.ts` (per-session frame preload: passkey requests fail fast, `navigator.userAgentData` names Google Chrome).
 - **`src/ui/`**: the sidebar + bottom bar page (`index.html`, `ui.ts`), the toolbar above the page (`toolbar.html`, `toolbar.ts`: back, forward, reload, address field and its suggestions) and the find bar (`find.html`, `find.ts`). Our own pages; CSP forbids inline styles/scripts. `src/ui/parts/` holds UI helper modules (`suggestions.ts` for the address suggestions, `bookmarksSection.ts` and `historySection.ts` for the collapsible sections right under the tabs, `libraryRows.ts` for their shared rows (and `setupRoving`: one Tab stop per list, arrow keys, focus kept across re-renders), `profileBar.ts` for the pills and inline display-name edit, `pinBar.ts` for the pin tiles, `icons.ts` for the inline SVG icon set (no text glyphs as icons), `profileDrag.ts` for dragging profile pills, `dom.ts`) bundled into the entry points; only `src/ui/*.ts` are entry points.
 - **`src/shared/types.ts`**: types and IPC channel names shared by main, preload and UI.
@@ -89,9 +90,9 @@ Popups are separate small windows (registered in `pages.ts`, `isPopupWindow`). T
 - **State:** `state.json` decodes tolerantly. A bad or missing field falls back to its default without losing the others, a corrupt file is set aside, and writes are atomic. v1's `settings.json` next to it is ignored.
 - **Lazy restore:** after launch, only each visible profile's active tab loads: the shown one at once, the others hidden, 300 ms apart (`loadActiveTabs`). Other tabs, and hidden profiles' tabs, load when first shown. Within a run, tabs are never unloaded, and switching tab or profile never reloads.
 - **Closing tabs:** a tab closes through `webContents.close({ waitForBeforeUnload: true })` and leaves the model only when its page is destroyed, so "Stay" on the "Leave site?" sheet (`will-prevent-unload`, in `wirePage`) keeps it. After a page is destroyed Electron drops the view's `webContents` (it reads `undefined`): go through `openContents(view)`. Nothing that runs while the window closes may change the saved tabs.
-- **State saves:** the store writes at most 2 s after the first unsaved change, however often `save` is called; tab events that change nothing saved (loading, favicons) don't save, except a favicon change that updates a pin's stored icon.
+- **State saves:** the store writes at most 2 s after the first unsaved change, however often `save` is called; tab events that change nothing saved (loading, favicons, titles) don't save, except when they change a pin's stored icon or title.
 - **Display names:** live only in `state.displayNames`; Chrome's profile names are never written.
-- **Pins:** a pin carries its own `dir` and opens only in that profile (through the normal per-profile tab path).
+- **Pins:** a pin carries its own `dir` and opens only in that profile (through the normal per-profile tab path). One pin per profile and host (`dir|host`); a click goes to the remembered tab on that host, else the first tab on it, else opens the pin's URL, and never reloads. Pins of hidden profiles are kept but not shown.
 - **Hidden profiles:** their tab views keep running but are muted (`setAudioMuted`) while hidden.
 
 ## Docs
@@ -104,4 +105,5 @@ Popups are separate small windows (registered in `pages.ts`, `isPopupWindow`). T
   - no flicker or reloads;
   - never lose tabs or logins.
 - `docs/superpowers/plans/2026-11-19-superbrowser-electron.md`: the implementation plan. Its **Deviations during execution** section records where the code intentionally differs; update it when you change one of those decisions.
+- `docs/superpowers/specs/2026-11-19-bottom-bar-pins-display-names-design.md` and `docs/superpowers/plans/2026-11-19-bottom-bar-pins-display-names.md`: steady profile pills, display names and pinned tabs (the spec ends with its own deviations).
 - `docs/superpowers/specs/2026-11-18-superbrowser-design.md` and `docs/superpowers/plans/2026-11-18-superbrowser.md` cover v1 (superseded).

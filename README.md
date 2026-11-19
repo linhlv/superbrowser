@@ -16,7 +16,7 @@ Each build has a new ad-hoc signature, so macOS forgets Superbrowser's camera, m
 
 Superbrowser keeps its data in `~/Library/Application Support/Superbrowser`:
 
-- `state.json` holds tabs, window position, profile order, hidden profiles and saved site permissions.
+- `state.json` holds tabs, window position, profile order, hidden profiles, display names, pinned tabs, open sidebar sections and saved site permissions.
 - `Partitions/` holds each profile's cookies and storage.
 - `Profiles/<profile>/` holds that profile's `history.db` and `bookmarks.json`.
 
@@ -87,7 +87,7 @@ macOS uses ⌃1…⌃9 for "Switch to Desktop N" if that is turned on. If it is,
 - Profiles, names and colours come from Chrome's profile list. A profile deleted in Chrome keeps its Superbrowser data and stays in the bar until you hide it.
 - Drag a profile's pill along the bar to reorder it: the others slide apart to show where it lands, and Esc or letting go above the bar cancels. Right-click a profile's pill for **Move Left**, **Move Right**, **Set Display Name…**, **Hide Profile** and **Open in Chrome**. ⌃N follows the bar order, which is Superbrowser's own (Chrome's is never changed).
 - **Set Display Name…** edits the name right in the pill: Enter or clicking away saves, Esc cancels, an empty name goes back to Chrome's name (up to 40 characters). It is used in pills, tooltips, menus, popup titles and import sheets, and is stored only in Superbrowser (Chrome's data is never written).
-- **Pinned tabs.** Right-click a sidebar tab, or use **Tab ▸ Pinned to Bar**, to pin it. The pin appears as a tile at the right of the bottom bar with the site's icon and a dot in its profile's colour. Clicking a pin switches to its profile and shows its tab there (without a reload), or opens the pin's address if the profile has no tab on that site. Right-click a tile for **Unpin**, **Move Left** and **Move Right**. Pins of a hidden profile are hidden until it comes back. When the bar is full, pins shrink before profile pills do.
+- **Pinned tabs.** Right-click a sidebar tab, or use **Tab ▸ Pinned to Bar**, to pin it. The pin appears as a tile at the right of the bottom bar with the site's icon and a dot in its profile's colour. Clicking a pin (or ⌥⌘1…⌥⌘9) switches to its profile and shows its tab on that site there, the one you used last if there are several (without a reload), or opens the pin's address if the profile has no tab on that site. The tile's icon and tooltip follow that tab. Right-click a tile for **Unpin**, **Move Left** and **Move Right**. Pins of a hidden profile are hidden until it comes back. When the bar is full, pins shrink before profile pills do.
 - **Profiles ▸ Show Hidden Profiles** brings a hidden profile back.
 - **View ▸ Show Profile Names** shows names next to the pills all the time. Otherwise the name and ⌃N show in the pill's tooltip.
 - **Profiles ▸ Open This Profile in Chrome** opens the shown profile in real Chrome. Use it for anything Superbrowser can't do (see below).
@@ -115,6 +115,7 @@ Sites ask before using the camera, microphone, screen sharing, notifications, lo
 - **blob: documents open in a small popup window,** not a tab. An example is a PDF a web app generates.
 - **No popup blocker.** A page can open windows without a click.
 - **A hidden profile's open tabs keep running.** They are muted while the profile is hidden.
+- **A click on the page while address suggestions are open is passed on as a plain click.** It closes the list and clicks there (a link opens), but a drag or text selection that starts there doesn't carry over.
 - Saved site permissions can't be revoked from the app yet. Remove them from `permissions` in `state.json` while Superbrowser is not running.
 - In development (`npm start`) the menu bar says "Electron". The built app says "Superbrowser".
 
@@ -189,7 +190,7 @@ Walk this list on the installed app after a change that affects it.
     - A text field: Cut, Copy, Paste, Select All.
     - Inspect opens DevTools at the element.
 37. Download a PDF twice. Both appear in the sidebar's Downloads list, and `~/Downloads` has `x.pdf` and `x (1).pdf`. A "Downloaded x.pdf" notification appears. Clicking a row shows the file in Finder. ⌃2 shows another profile: its Downloads list doesn't show `x.pdf`.
-38. YouTube full screen: the video fills the window and the window goes full screen. Esc restores the sidebar and bar. If the window was already full screen before, it stays full screen. ⌃2 during a full-screen video ends it.
+38. YouTube full screen: the video fills the window (the toolbar strip is hidden too) and the window goes full screen. Clicking the video's top controls doesn't drag the window. Esc restores the toolbar, sidebar and bar. If the window was already full screen before, it stays full screen. ⌃2 during a full-screen video ends it.
 
 **Bookmarks and history**
 
@@ -204,6 +205,8 @@ Walk this list on the installed app after a change that affects it.
 47. With a section open, ⌃2 empties and refills it with that profile's data and keeps the search text; which sections are open doesn't change. **History ▸ Clear History…** asks "Clear all history for <profile>?". Cancel keeps it, and Clear empties only that profile's history (another profile's suggestions still work).
 48. Drag the 4th profile's pill to the front: the others slide aside, the drop sticks without a flicker, ⌃1 now shows that profile, and a relaunch keeps the order. A click (even with a slight wobble) still switches profile and right-click still shows Move Left/Right. Esc mid-drag, or letting go above the bar, puts it back. Dragging a pill never moves the window, while dragging the bar's empty space still does. Hide a profile, reorder the others, then show it again: it is back in its old place.
 49. Right under the tabs and New Tab (not at the bottom of the sidebar), **Bookmarks** and **History** headers are folded on first launch. Click Bookmarks: it opens under the tabs, the tab list stays and shrinks to at most about half the sidebar, and both scroll on their own. With many tabs, select the last one and open a section: the active tab is still in view, and ⌘T's new tab scrolls into view. Open History too: the two share the space. Quit and relaunch: both are still open. Click a header while a page is loading: it stays the way you clicked it. Esc in a section's search clears it, then leaves the field; it never folds the section. ⌘Y folds History (typing then goes to the page); ⌘Y again opens it with the search focused and its text selected.
+
+**Keyboard and readability**
 
 50. Keyboard: Tab moves through the toolbar, tabs, New Tab, section headers, library rows, downloads, profile pills and pins with a visible blue (or, on pills and pins, white) ring; a mouse click shows no ring. Enter or Space on a tab row selects it; on a library row it opens it (⌘Enter in a new tab). The Bookmarks and History lists are one Tab stop each: ↑ ↓ Home End move between rows and → ← open and close a bookmark folder. With a History row focused, browse in another tab: when the list refreshes, the same row keeps the focus. Icons are the same line style everywhere (toolbar, sidebar, bar, find bar).
 51. Give a profile a light colour in Chrome (yellow, mint): the window tint is a darker shade of it and all sidebar text stays readable; the profile's avatar initials are dark. Turn on System Settings → Accessibility → Display → Reduce motion: switching profile changes the tint at once and nothing in the sidebar animates.
