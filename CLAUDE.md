@@ -27,7 +27,7 @@ scripts/make-icon.sh              # resources/Superbrowser.png → resources/ico
   - address parsing, UA/client hints, Chrome profile parsing and merging;
   - state decode and atomic store, the tab model, layout maths;
   - cookie decryption and import planning, the permission policy and prompt queue;
-  - download names, context-menu spec, UI command validation (`uiProtocol.ts`).
+  - download names and the per-profile downloads list, context-menu spec, popup titles, UI command validation (`uiProtocol.ts`).
 - **`src/main/`**: thin Electron adapters wired together in `main.ts`:
   - `sessions.ts`: per-profile session, UA, permissions, frame preload, downloads.
   - `tabManager.ts`: one `WebContentsView` per tab, lazy restore, muting.
@@ -50,7 +50,7 @@ Window structure: one `BrowserWindow`. Its child views stack in insertion order:
 - each tab's view on top, only the active one visible;
 - the find bar view, re-raised whenever it is shown.
 
-Popups are separate small windows. Closing the main window quits. ⌘W never closes the window.
+Popups are separate small windows (registered in `pages.ts`, `isPopupWindow`). Their title is always `host — page title (profile)` (`popupTitle`). Page shortcuts (⌘W, ⌘R, ⌘P, zoom, DevTools, Back/Forward) act on a focused popup; ⌘W closes it. Closing the main window quits: tab pages close at once (`TabManager.shutDown`), popups are destroyed, and the saved tabs are kept. ⌘W never closes the main window.
 
 ## Invariants that are easy to break
 
@@ -78,7 +78,9 @@ Popups are separate small windows. Closing the main window quits. ⌘W never clo
   - Never automate sign-in.
 - **Profiles from Chrome:** a missing, unreadable or mid-write `Local State` (empty `info_cache`) keeps the profiles already known (`mergeProfiles`). Profiles deleted in Chrome stay until hidden. The bar is never empty.
 - **State:** `state.json` decodes tolerantly. A bad or missing field falls back to its default without losing the others, a corrupt file is set aside, and writes are atomic. v1's `settings.json` next to it is ignored.
-- **Lazy restore:** after launch, only each profile's active tab loads. Others load when first shown. Within a run, tabs are never unloaded, and switching tab or profile never reloads.
+- **Lazy restore:** after launch, only each visible profile's active tab loads: the shown one at once, the others hidden, 300 ms apart (`loadActiveTabs`). Other tabs, and hidden profiles' tabs, load when first shown. Within a run, tabs are never unloaded, and switching tab or profile never reloads.
+- **Closing tabs:** a tab closes through `webContents.close({ waitForBeforeUnload: true })` and leaves the model only when its page is destroyed, so "Stay" on the "Leave site?" sheet (`will-prevent-unload`, in `wirePage`) keeps it. After a page is destroyed Electron drops the view's `webContents` (it reads `undefined`): go through `openContents(view)`. Nothing that runs while the window closes may change the saved tabs.
+- **State saves:** the store writes at most 2 s after the first unsaved change, however often `save` is called; tab events that change nothing saved (loading, favicons) don't save.
 - **Hidden profiles:** their tab views keep running but are muted (`setAudioMuted`) while hidden.
 
 ## Docs

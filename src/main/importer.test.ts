@@ -123,7 +123,7 @@ test('a denied Keychain read changes nothing and is asked again next time', asyn
   let reads = 0;
   const { chromeDir, jarDirs, importer } = setup(ROWS, async () => { reads++; throw new Error('security exited with 128'); });
   await assert.rejects(importer.importLogins('Profile 1', 'add'), /couldn't read Chrome's login key from your Keychain/);
-  await assert.rejects(importer.key(), (e) => e instanceof ImportError && /Always Allow/.test(e.detail));
+  await assert.rejects(importer.key(), (e) => e instanceof ImportError && /click Allow/.test(e.detail) && !/Always Allow/.test(e.detail));
   assert.equal(reads, 2);
   assert.deepEqual(jarDirs, []);
   fs.rmSync(chromeDir, { recursive: true });

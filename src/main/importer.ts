@@ -35,7 +35,7 @@ export class ImportError extends Error {
 }
 
 const keychainError = () => new ImportError('Superbrowser couldn\'t read Chrome\'s login key from your Keychain.',
-  'Nothing was imported. Try again and click Always Allow when macOS asks about “Chrome Safe Storage”.');
+  'Nothing was imported. Try again and click Allow when macOS asks about “Chrome Safe Storage”.');
 /** Failures logged per import (the rest are only counted). */
 const MAX_LOGGED_FAILURES = 5;
 

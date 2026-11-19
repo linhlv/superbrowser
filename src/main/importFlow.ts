@@ -15,9 +15,11 @@ export type ImportFlowDeps = {
   reloadProfile(dir: string): void;
 };
 
+// "Allow", not "Always Allow": the prompt comes from /usr/bin/security, so Always Allow would let any program
+// read Chrome's cookie key through it without asking.
 const EXPLANATION = 'Superbrowser will copy this profile\'s logins (cookies) from Google Chrome. macOS will ask to allow '
-  + 'access to “Chrome Safe Storage” — click Always Allow. You can keep using these accounts in Chrome too; Google may '
-  + 'occasionally sign one of them out.';
+  + 'access to “Chrome Safe Storage” — click Allow (not Always Allow). You can keep using these accounts in Chrome too; '
+  + 'Google may occasionally sign one of them out.';
 
 const logins = (n: number) => `${n} login${n === 1 ? '' : 's'}`;
 

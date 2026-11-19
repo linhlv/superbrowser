@@ -12,6 +12,8 @@ scripts/build-app.sh --install
 
 This runs the tests, builds `build/Superbrowser-darwin-arm64/Superbrowser.app` (ad-hoc signed), quits a running Superbrowser and replaces `~/Applications/Superbrowser.app`. Without `--install` it only builds. Run it again to update, for example after bumping Electron (`npm install electron@latest`). The browser's user agent follows Electron's Chromium version automatically.
 
+Each build has a new ad-hoc signature, so macOS forgets Superbrowser's camera, microphone and screen recording permissions after every rebuild or reinstall, and asks again the next time a site uses them.
+
 Superbrowser keeps its data in `~/Library/Application Support/Superbrowser`:
 
 - `state.json` holds tabs, window position, profile order, hidden profiles and saved site permissions.
@@ -22,8 +24,10 @@ Superbrowser keeps its data in `~/Library/Application Support/Superbrowser`:
 ## First run
 
 1. Superbrowser offers to **import logins from Chrome** for all profiles. Click **Import All**, then **Import** on the short explanation sheet.
-2. macOS asks for the "Chrome Safe Storage" Keychain item. Click **Always Allow**. Superbrowser only reads it.
+2. macOS asks for the "Chrome Safe Storage" Keychain item. Click **Allow**, not **Always Allow**. The prompt comes from the system's `security` tool, so Always Allow would let any program on your Mac read Chrome's cookie key through that tool without asking. With Allow, macOS asks once each time Superbrowser imports after a launch. Superbrowser keeps the key in memory for that run and never changes the Keychain item.
 3. A summary lists what was imported per profile. Your Google accounts are now signed in, in the right profile each.
+
+If you clicked **Always Allow** before (an earlier version said to), undo it: open Keychain Access, find "Chrome Safe Storage" in the login keychain, open it, go to **Access Control**, select `security` in the list of allowed applications, click **−** and **Save Changes**.
 
 You can repeat the import any time from the **Profiles** menu:
 
@@ -42,7 +46,7 @@ A normal import only adds logins Superbrowser doesn't have yet. It never signs y
 | ⌘T | New tab (focuses the address field) |
 | ⇧⌘T | Reopen the last closed tab |
 | ⌘L | Focus the address field |
-| ⌘W | Close the tab (never the window) |
+| ⌘W | Close the tab (never the window). In a popup window: close the popup |
 | ⌘S | Hide or show the sidebar |
 | ⌘R | Reload |
 | ⌘[ / ⌘] | Back / Forward |
@@ -52,6 +56,8 @@ A normal import only adds logins Superbrowser doesn't have yet. It never signs y
 | ⌘P | Print |
 | ⌥⌘I | Developer Tools for the page |
 | ⌘Q, red button | Quit (tabs come back on the next launch) |
+
+In a popup window (a sign-in or pop-out window), ⌘R, ⌘P, ⌘[ / ⌘], zoom and ⌥⌘I act on the popup; ⌘F does nothing there.
 
 The address field takes a URL or a Google search: `example.com`, `localhost:3000` and `192.168.1.10/admin` open as addresses.
 
@@ -65,7 +71,13 @@ macOS uses ⌃1…⌃9 for "Switch to Desktop N" if that is turned on. If it is,
 - **View ▸ Show Profile Names** shows names next to the dots all the time. Otherwise a name and its ⌃N slide out when you hover a dot.
 - **Profiles ▸ Open This Profile in Chrome** opens the shown profile in real Chrome. Use it for anything Superbrowser can't do (see below).
 
-Switching profile or tab never reloads a page. After a relaunch, each profile's active tab loads first. Other tabs load when you first show them.
+Switching profile or tab never reloads a page. After a relaunch, the active tab of every visible profile loads: the shown one at once, the others a moment later and out of sight, so their mail and calendar notifications keep working. Other tabs, and every tab of a hidden profile, load when you first show them.
+
+A page that warns about unsaved changes asks "Leave site?" before its tab or popup closes, reloads or goes to another address. **Stay** keeps the page as it is.
+
+Popup windows (for example "Sign in with Google") show the address's host and the profile in their title, such as `accounts.google.com — Sign in (Work)`. A page can't change that part, so check the host before you paste a password into a popup.
+
+The sidebar's Downloads list shows only the shown profile's downloads, so other profiles' file names don't appear on a shared screen.
 
 Sites ask before using the camera, microphone, screen sharing, notifications, location or the clipboard. The answer is per profile and per site. Allow with "Remember for this site" is saved. Block lasts until you quit.
 
@@ -75,6 +87,7 @@ Sites ask before using the camera, microphone, screen sharing, notifications, lo
 - **No password autofill.** Copy passwords from the macOS Passwords app.
 - **No Chrome extensions.** Use **Open This Profile in Chrome** for anything that needs one.
 - **claude.ai needs a fresh login.** Its login is tied to the device and doesn't import.
+- **Client hints are incomplete.** Electron sends `Sec-CH-UA` (which Superbrowser makes name Google Chrome) only with a page's own requests, not when a page is opened, and never sends the extra hints a site can ask for. Real Chrome sends both.
 - **Google may occasionally sign one browser out.** Chrome and Superbrowser share the same Google sessions. If Superbrowser gets signed out, use **Profiles ▸ Replace Logins from Chrome…**.
 - **Links to other apps don't open.** `mailto:`, `zoommtg:` and similar links do nothing. Copy the link, or use Chrome.
 - **blob: documents open in a small popup window,** not a tab. An example is a PDF a web app generates.
@@ -93,7 +106,7 @@ Walk this list on the installed app after a change that affects it.
 2. ⌃2 shows another profile. ⌃1 returns to the first page without a reload, and the scroll position is kept. The window tint changes to the profile's colour.
 3. Sign in to a site in one profile. Another profile is still signed out there.
 4. Hovering a dot slides out the profile's name and ⌃N. Clicking a dot switches profile.
-5. Move and resize the window, quit, and relaunch. The same profile, tabs and window position come back.
+5. Move and resize the window, quit, and relaunch. The same profile, tabs and window position come back. A second visible profile's active tab is already loaded when you first switch to it (no load on switch); its other tabs load when shown.
 6. The menu bar and the Dock say "Superbrowser" and show its icon.
 
 **Sidebar and tabs**
@@ -108,6 +121,7 @@ Walk this list on the installed app after a change that affects it.
     - with the sidebar shown and with it hidden;
     - with focus in the page, in the address field and in the find bar.
 11. ⌘W never closes the window, even on the last tab.
+    - On a page with a filled-in form that warns before leaving (for example a draft in a web form), ⌘W, ⌘R and typing an address ask "Leave site?". **Stay** keeps the page and its text; **Leave** proceeds.
 12. ⌘F shows a white rounded bar at the top right of the page, with its field focused. Typing highlights matches and shows a "2/7"-style count, which is red at 0/0. Enter and ⇧Enter step through matches. Esc closes the bar, clears the highlights and lets you type into the page. Switching tab or profile closes the bar.
 13. ⌘P shows the print dialog. ⌥⌘I opens detached DevTools for the page, and pressing it again closes them.
 
@@ -121,7 +135,7 @@ Walk this list on the installed app after a change that affects it.
 
 **Login import** (to test the first run: quit, then remove `state.json` and `Partitions/` from the data folder)
 
-19. The first-run sheet appears over the window. Choose **Import All**. The explanation sheet appears, then the macOS Keychain prompt for "Chrome Safe Storage" (Always Allow), then one summary listing every visible profile.
+19. The first-run sheet appears over the window. Choose **Import All**. The explanation sheet appears and says to click Allow, not Always Allow. Then the macOS Keychain prompt for "Chrome Safe Storage" appears (click **Allow**), then one summary listing every visible profile.
 20. Gmail opens signed in on each imported profile without logging in. Chrome is still signed in.
 21. **Import Logins from Chrome** again reports 0 new logins, with the rest skipped.
 22. Clicking Deny at the Keychain prompt shows an error sheet, and nothing changes.
@@ -138,14 +152,16 @@ Walk this list on the installed app after a change that affects it.
 **Pages, popups and downloads**
 
 29. ⌘-click a link: a background tab opens right after the current one. ⇧-click: a foreground tab.
-30. "Sign in with Google" on a third-party site opens a small window that is already signed in to the same profile's Google account. It completes the sign-in and closes itself.
+30. "Sign in with Google" on a third-party site opens a small window that is already signed in to the same profile's Google account. Its title starts with `accounts.google.com` and ends with the profile's name in brackets. It completes the sign-in and closes itself.
+    - With the popup focused, ⌘R reloads the popup, not the main window's tab, and ⌘W closes the popup.
+    - Closing the main window while a popup is open quits Superbrowser, and the popup closes too.
 31. Right-click menus:
     - A link: Open Link in New Tab, Copy Link Address.
     - An image: Copy Image, and Save Image As…, which saves to Downloads.
     - Selected text: Copy, Search Google for "…".
     - A text field: Cut, Copy, Paste, Select All.
     - Inspect opens DevTools at the element.
-32. Download a PDF twice. Both appear in the sidebar's Downloads list, and `~/Downloads` has `x.pdf` and `x (1).pdf`. A "Downloaded x.pdf" notification appears. Clicking a row shows the file in Finder.
+32. Download a PDF twice. Both appear in the sidebar's Downloads list, and `~/Downloads` has `x.pdf` and `x (1).pdf`. A "Downloaded x.pdf" notification appears. Clicking a row shows the file in Finder. ⌃2 shows another profile: its Downloads list doesn't show `x.pdf`.
 33. YouTube full screen: the video fills the window and the window goes full screen. Esc restores the sidebar and bar. If the window was already full screen before, it stays full screen. ⌃2 during a full-screen video ends it.
 
 ## Privacy
