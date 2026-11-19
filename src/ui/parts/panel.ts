@@ -2,29 +2,12 @@ import type { SuperbrowserApi } from '../../preload/ui.ts';
 import type { BookmarkNode, HistoryRow, LibraryReply, PanelRequest } from '../../shared/types.ts';
 import { dayLabel, dayOf } from '../../core/searchText.ts';
 import { ancestorFolders, searchBookmarks } from '../../core/bookmarks.ts';
+import { el, faviconIcon as icon } from './dom.ts';
 
 type Panel = PanelRequest['panel'];
 
 const LOAD_MORE_WITHIN_PX = 200;
 const SEARCH_DELAY_MS = 150;
-
-function el<K extends keyof HTMLElementTagNameMap>(tag: K, className: string, text?: string): HTMLElementTagNameMap[K] {
-  const e = document.createElement(tag);
-  e.className = className;
-  if (text !== undefined) e.textContent = text;
-  return e;
-}
-
-const isImageUrl = (url: string | null | undefined): url is string => !!url && /^(https?:|data:image\/)/i.test(url);
-
-function icon(favicon: string | null | undefined): HTMLElement {
-  if (!isImageUrl(favicon)) return el('span', 'icon ph');
-  const img = el('img', 'icon');
-  img.alt = '';
-  img.addEventListener('error', () => img.replaceWith(el('span', 'icon ph')));
-  img.src = favicon;
-  return img;
-}
 
 function host(url: string): string {
   try { return new URL(url).host; } catch { return ''; }
@@ -94,7 +77,10 @@ export function setupPanel(opts: { sb: SuperbrowserApi; root: HTMLElement; tabs:
   // ---- History
 
   function requestHistory(before: number | null): void {
-    if (before === null) historyQuery = search.value;
+    if (before === null) {
+      clearTimeout(searchTimer); // this request already carries the typed query
+      historyQuery = search.value;
+    }
     appending = before !== null;
     loading = true;
     sb.send({ type: 'historyPage', seq: ++historySeq, query: historyQuery, before });
@@ -135,10 +121,13 @@ export function setupPanel(opts: { sb: SuperbrowserApi; root: HTMLElement; tabs:
 
   function loadMoreIfNear(): void {
     if (shown !== 'history' || !more || loading || lastTime === null) return;
+    if (list.clientHeight === 0) return; // sidebar hidden: nothing is near the bottom of an unseen list
     if (list.scrollHeight - list.scrollTop - list.clientHeight < LOAD_MORE_WITHIN_PX) requestHistory(lastTime);
   }
 
   list.addEventListener('scroll', loadMoreIfNear);
+  // Re-check when the list gets its size back (sidebar shown again) or grows (window resized).
+  new ResizeObserver(loadMoreIfNear).observe(list);
 
   // ---- Bookmarks
 

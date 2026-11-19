@@ -1,6 +1,7 @@
 import type { SuperbrowserApi } from '../preload/ui.ts';
 import { setupSuggestions } from './parts/suggestions.ts';
 import { setupPanel } from './parts/panel.ts';
+import { el, faviconIcon, isImageUrl } from './parts/dom.ts';
 import type { DownloadState, UiState, UiTab } from '../shared/types.ts';
 
 declare global {
@@ -17,13 +18,6 @@ const tabList = byId('tablist');
 const profileBar = byId('profiles');
 
 let current: UiState | null = null;
-
-function el<K extends keyof HTMLElementTagNameMap>(tag: K, className: string, text?: string): HTMLElementTagNameMap[K] {
-  const e = document.createElement(tag);
-  e.className = className;
-  if (text !== undefined) e.textContent = text;
-  return e;
-}
 
 // Address field: a click selects everything (mouseup would otherwise drop the selection).
 address.addEventListener('mousedown', (e) => {
@@ -56,22 +50,11 @@ function createTabRow(id: number): HTMLElement {
   return row;
 }
 
-const isImageUrl = (url: string | null): url is string => url !== null && /^(https?:|data:image\/)/i.test(url);
-
 function setIcon(row: HTMLElement, favicon: string | null): void {
   const src = isImageUrl(favicon) ? favicon : '';
   if (row.dataset['favicon'] === src) return;
   row.dataset['favicon'] = src;
-  const placeholder = () => el('span', 'icon ph');
-  let icon: HTMLElement = placeholder();
-  if (src) {
-    const img = el('img', 'icon');
-    img.alt = '';
-    img.addEventListener('error', () => img.replaceWith(placeholder()));
-    img.src = src;
-    icon = img;
-  }
-  row.querySelector('.icon')!.replaceWith(icon);
+  row.querySelector('.icon')!.replaceWith(faviconIcon(src));
 }
 
 function updateTabRow(row: HTMLElement, tab: UiTab, active: boolean): void {
