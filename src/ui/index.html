@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src http: https: data:">
+<title>Superbrowser</title>
+<link rel="stylesheet" href="ui.css">
+</head>
+<body>
+<div class="drag gap"></div>
+<aside id="side">
+  <div class="drag"></div>
+  <div class="nav">
+    <button id="back" title="Back ⌘[" disabled>‹</button><button id="forward" title="Forward ⌘]" disabled>›</button><button id="reload" title="Reload ⌘R">↻</button>
+  </div>
+  <input id="address" type="text" spellcheck="false" autocomplete="off" placeholder="Search or enter URL">
+  <div id="tabs">
+    <div id="tablist"></div>
+    <div id="newtab">+  New Tab</div>
+  </div>
+</aside>
+<footer id="bar">
+  <button id="toggle" title="Show/hide sidebar ⌘S">◧</button>
+  <div id="profiles"></div>
+</footer>
+<script src="ui.js"></script>
+</body>
+</html>

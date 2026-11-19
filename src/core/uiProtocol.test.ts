@@ -1,0 +1,62 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { barProfiles, parseUiCommand } from './uiProtocol.ts';
+
+const p = (dir: string) => ({ dir, name: `Name ${dir}`, color: '#123456' });
+
+test('barProfiles: shortcuts 1–9 in bar order, null after the ninth', () => {
+  const bar = barProfiles(Array.from({ length: 11 }, (_, i) => p(`P${i}`)));
+  assert.deepEqual(bar.map((x) => x.shortcut), [1, 2, 3, 4, 5, 6, 7, 8, 9, null, null]);
+  assert.deepEqual(bar[0], { dir: 'P0', name: 'Name P0', color: '#123456', shortcut: 1 });
+});
+
+test('barProfiles: empty list stays empty', () => {
+  assert.deepEqual(barProfiles([]), []);
+});
+
+const known = new Set(['Default', 'Profile 3']);
+
+test('parseUiCommand: accepts every well-formed command and keeps only its fields', () => {
+  const cases: unknown[] = [
+    { type: 'selectProfile', dir: 'Default' },
+    { type: 'profileMenu', dir: 'Profile 3' },
+    { type: 'selectTab', id: 4 },
+    { type: 'closeTab', id: 1 },
+    { type: 'newTab' },
+    { type: 'navigate', input: 'example.com' },
+    { type: 'back' },
+    { type: 'forward' },
+    { type: 'reload' },
+    { type: 'toggleSidebar' },
+    { type: 'revealDownload', id: 'd1' },
+  ];
+  for (const c of cases) assert.deepEqual(parseUiCommand(c, known), c);
+  assert.deepEqual(parseUiCommand({ type: 'back', extra: 'x' }, known), { type: 'back' });
+  assert.deepEqual(parseUiCommand({ type: 'selectTab', id: 2, dir: 'Default' }, known), { type: 'selectTab', id: 2 });
+});
+
+test('parseUiCommand: rejects unknown types and non-objects', () => {
+  for (const raw of [null, undefined, 'back', 42, [], {}, { type: 'quit' }, { type: 'toString' }, { type: 7 }]) {
+    assert.equal(parseUiCommand(raw, known), null, JSON.stringify(raw));
+  }
+});
+
+test('parseUiCommand: profile commands need a known profile dir', () => {
+  assert.equal(parseUiCommand({ type: 'selectProfile', dir: 'Profile 9' }, known), null);
+  assert.equal(parseUiCommand({ type: 'selectProfile' }, known), null);
+  assert.equal(parseUiCommand({ type: 'profileMenu', dir: 3 }, known), null);
+  assert.equal(parseUiCommand({ type: 'selectProfile', dir: '__proto__' }, known), null);
+});
+
+test('parseUiCommand: tab ids must be integers', () => {
+  for (const id of ['1', 1.5, NaN, Infinity, null, undefined]) {
+    assert.equal(parseUiCommand({ type: 'selectTab', id }, known), null, String(id));
+    assert.equal(parseUiCommand({ type: 'closeTab', id }, known), null, String(id));
+  }
+});
+
+test('parseUiCommand: string payloads must be strings', () => {
+  assert.equal(parseUiCommand({ type: 'navigate', input: 5 }, known), null);
+  assert.equal(parseUiCommand({ type: 'navigate' }, known), null);
+  assert.equal(parseUiCommand({ type: 'revealDownload', id: 5 }, known), null);
+});
