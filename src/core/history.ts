@@ -17,12 +17,21 @@ CREATE TABLE IF NOT EXISTS visits(
   id INTEGER PRIMARY KEY, url_id INTEGER NOT NULL REFERENCES urls(id) ON DELETE CASCADE, time INTEGER NOT NULL, UNIQUE(url_id, time));
 CREATE INDEX IF NOT EXISTS visits_time ON visits(time);`;
 
+class CorruptError extends Error {}
+
+// SQLITE_CORRUPT (11) and SQLITE_NOTADB (26) are the only failures that justify setting a database aside.
+function isCorruption(e: unknown): boolean {
+  if (e instanceof CorruptError) return true;
+  const code = (e as { errcode?: unknown } | null)?.errcode;
+  return code === 11 || code === 26;
+}
+
 function openChecked(file: string): DatabaseSync {
   const db = new DatabaseSync(file);
   try {
     db.exec('PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON');
     const row = db.prepare('PRAGMA quick_check').get() as { quick_check: string } | undefined;
-    if (row?.quick_check !== 'ok') throw new Error(`quick_check: ${row?.quick_check}`);
+    if (row?.quick_check !== 'ok') throw new CorruptError(`quick_check: ${row?.quick_check}`);
     db.exec(SCHEMA);
     return db;
   } catch (e) {
@@ -42,6 +51,7 @@ export class HistoryDb {
     try {
       return new HistoryDb(openChecked(file));
     } catch (e) {
+      if (!isCorruption(e)) throw e;
       const stamp = Date.now();
       for (const suffix of ['', '-wal', '-shm']) {
         if (existsSync(file + suffix)) renameSync(file + suffix, `${file}${suffix}.corrupt-${stamp}`);
@@ -133,8 +143,7 @@ export class HistoryDb {
     return rows.map((r) => ({ url: r.url, title: r.title, visitCount: r.visit_count, typedCount: r.typed_count, lastVisit: r.last_visit, favicon: r.favicon }));
   }
 
-  page(query: string, before: number | null, limit: number, tzOffsetMin: number): { rows: HistoryRow[]; more: boolean } {
-    const words = splitWords(query);
+  private pageRows(words: string[], before: number | null, exact: number | null, limit: number, tzOffsetMin: number): HistoryRow[] {
     const filter = words.length ? `WHERE url_id IN (SELECT id FROM urls WHERE ${this.wordClause(words.length)})` : '';
     // day = floor((time - tz) / DAY_MS); SQLite integer division truncates, so floor by hand.
     const sql = `SELECT u.url AS url, u.title AS title, g.t AS t, g.day AS day, u.favicon AS favicon FROM (
@@ -143,13 +152,23 @@ export class HistoryDb {
             SELECT url_id, time, time - ? AS x FROM visits ${filter}))
         GROUP BY url_id, day) g
       JOIN urls u ON u.id = g.url_id
-      WHERE (? IS NULL OR g.t < ?)
+      WHERE (? IS NULL OR g.t < ?) AND (? IS NULL OR g.t = ?)
       ORDER BY g.t DESC, g.url_id DESC LIMIT ?`;
-    const rows = this.stmt(sql).all(tzOffsetMin * 60_000, ...words, before, before, limit + 1) as Array<{ url: string; title: string; t: number; day: number; favicon: string | null }>;
-    return {
-      rows: rows.slice(0, limit).map((r) => ({ url: r.url, title: r.title, time: r.t, day: r.day, favicon: r.favicon })),
-      more: rows.length > limit,
-    };
+    const rows = this.stmt(sql).all(tzOffsetMin * 60_000, ...words, before, before, exact, exact, limit) as Array<{ url: string; title: string; t: number; day: number; favicon: string | null }>;
+    return rows.map((r) => ({ url: r.url, title: r.title, time: r.t, day: r.day, favicon: r.favicon }));
+  }
+
+  /** A page never splits rows with equal times, so `before = last.time` loses nothing. */
+  page(query: string, before: number | null, limit: number, tzOffsetMin: number): { rows: HistoryRow[]; more: boolean } {
+    const words = splitWords(query);
+    const rows = this.pageRows(words, before, null, limit + 1, tzOffsetMin);
+    if (rows.length <= limit) return { rows, more: false };
+    const lastT = rows[limit - 1].time;
+    const kept = rows.slice(0, limit).filter((r) => r.time !== lastT);
+    const tied = this.pageRows(words, null, lastT, -1, tzOffsetMin);
+    const out = [...kept, ...tied];
+    const more = this.pageRows(words, lastT, null, 1, tzOffsetMin).length > 0;
+    return { rows: out, more };
   }
 
   deleteUrl(url: string): void {

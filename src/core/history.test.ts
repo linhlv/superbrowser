@@ -1,6 +1,6 @@
 import { test, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, writeFileSync, readdirSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync, readdirSync, mkdirSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { HistoryDb } from './history.ts';
@@ -167,4 +167,26 @@ test('candidates stays fast with a large history', () => {
   const r = db.candidates(['jira'], 50);
   assert.equal(r.length, 50);
   assert.ok(performance.now() - t < 50);
+});
+
+test('page never splits rows with equal times', () => {
+  db.recordVisit('https://a.test/', T0, false);
+  db.recordVisit('https://b.test/', T0, false);
+  db.recordVisit('https://c.test/', T0 - 1000, false);
+  const p1 = db.page('', null, 1, 0);
+  assert.deepEqual(p1.rows.map((r) => r.url).sort(), ['https://a.test/', 'https://b.test/']);
+  assert.equal(p1.more, true);
+  const p2 = db.page('', p1.rows.at(-1)!.time, 1, 0);
+  assert.deepEqual(p2.rows.map((r) => r.url), ['https://c.test/']);
+  assert.equal(p2.more, false);
+  assert.equal(db.page('', null, 2, 0).more, true);
+  assert.equal(db.page('', null, 3, 0).more, false);
+});
+
+test('a non-corruption open failure rethrows and renames nothing', () => {
+  const file = join(dir, 'asdir.db');
+  mkdirSync(file); // a directory at the db path: SQLITE_CANTOPEN
+  assert.throws(() => HistoryDb.open(file, () => assert.fail('must not log')));
+  assert.deepEqual(readdirSync(dir).filter((f) => f.includes('corrupt')), []);
+  assert.ok(statSync(file).isDirectory());
 });
