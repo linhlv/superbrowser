@@ -3,7 +3,9 @@ import { setupBookmarksSection } from './parts/bookmarksSection.ts';
 import { setupHistorySection } from './parts/historySection.ts';
 import { setupPinBar } from './parts/pinBar.ts';
 import { setupProfileBar } from './parts/profileBar.ts';
-import { el, faviconIcon, isImageUrl } from './parts/dom.ts';
+import { activatable, el, faviconIcon, isImageUrl, markCurrent } from './parts/dom.ts';
+import { fillIcons, icon } from './parts/icons.ts';
+import { readableTint } from '../core/colors.ts';
 import type { DownloadState, Section, UiState, UiTab } from '../shared/types.ts';
 
 declare global {
@@ -11,6 +13,7 @@ declare global {
 }
 
 const sb = window.superbrowser;
+fillIcons(document);
 const byId = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const tabList = byId('tablist');
 
@@ -32,7 +35,7 @@ let sectionsSettled = false;
 function setSection(section: Section, open: boolean): void {
   const { root, handle } = sections[section];
   root.classList.toggle('open', open);
-  root.querySelector('.sec-a')!.textContent = open ? '▾' : '▸';
+  root.querySelector('.sec-h')!.setAttribute('aria-expanded', String(open));
   handle.setOpen(open);
 }
 
@@ -83,12 +86,16 @@ new ResizeObserver(revealActiveTab).observe(byId('tabs'));
 
 function createTabRow(id: number): HTMLElement {
   const row = el('div', 'tab');
-  const close = el('button', 'x', '×');
+  const close = el('button', 'x');
+  close.append(icon('close'));
   close.title = 'Close Tab';
+  close.setAttribute('aria-label', 'Close tab');
+  close.tabIndex = -1; // one Tab stop per row: Enter selects the tab, then ⌘W closes it (or use the row's menu)
   row.append(el('span', 'icon ph'), el('span', 't'), close);
   row.addEventListener('click', () => sb.send({ type: 'selectTab', id }));
   close.addEventListener('click', (e) => { e.stopPropagation(); sb.send({ type: 'closeTab', id }); });
   row.addEventListener('contextmenu', (e) => { e.preventDefault(); sb.send({ type: 'tabMenu', id }); }); // Pin to Bar, Close Tab
+  activatable(row);
   tabRows.set(id, row);
   return row;
 }
@@ -101,7 +108,7 @@ function setIcon(row: HTMLElement, favicon: string | null): void {
 }
 
 function updateTabRow(row: HTMLElement, tab: UiTab, active: boolean): void {
-  row.classList.toggle('on', active);
+  markCurrent(row, active);
   setIcon(row, tab.favicon);
   const label = tab.title || tab.url || 'New Tab';
   const text = (tab.loading ? '⋯ ' : '') + label;
@@ -139,6 +146,7 @@ function createDownloadRow(id: string): HTMLElement {
   const row = el('div', 'dl');
   row.append(el('div', 'f'), el('progress', ''), el('div', 's'));
   row.addEventListener('click', () => sb.send({ type: 'revealDownload', id }));
+  activatable(row);
   downloadRows.set(id, row);
   return row;
 }
@@ -184,7 +192,7 @@ sb.onState((s) => {
   document.body.classList.toggle('collapsed', !s.sidebarVisible);
   document.body.classList.toggle('names', s.showNames);
   const color = s.profiles.find((p) => p.dir === s.activeProfile)?.color;
-  if (color) document.body.style.setProperty('--tint', color);
+  if (color) document.body.style.setProperty('--tint', readableTint(color)); // darkened if white text wouldn't read on it
 
   renderTabs(s);
   profileBar.render(s);

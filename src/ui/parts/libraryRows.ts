@@ -1,7 +1,7 @@
 // Rows shared by the sidebar's Bookmarks and History sections. Titles and URLs are untrusted: textContent only.
 import type { SuperbrowserApi } from '../../preload/ui.ts';
 import type { LibraryReply } from '../../shared/types.ts';
-import { el } from './dom.ts';
+import { activatable, el } from './dom.ts';
 
 /** What ui.ts drives a sidebar section with. */
 export type SectionHandle = {
@@ -35,6 +35,7 @@ export function row(iconEl: HTMLElement, label: string, sub: string | null): HTM
   text.append(el('span', 't', label));
   if (sub !== null) text.append(el('span', 'ps', sub));
   r.append(iconEl, text);
+  activatable(r);
   return r;
 }
 

@@ -1,6 +1,7 @@
 import type { SuperbrowserApi } from '../../preload/ui.ts';
 import type { LibraryReply, Suggestion } from '../../shared/types.ts';
 import { googleSearchUrl } from '../../core/address.ts';
+import { icon } from './icons.ts';
 
 type Row = { el: HTMLElement; url: string; search: boolean };
 
@@ -65,7 +66,7 @@ export function setupSuggestions(opts: {
     if (item) {
       text.append(span('sg-title', item.title || item.url), span('sg-url', item.url));
       el.append(span('icon ph', ''), text);
-      if (item.bookmarked) el.append(span('sg-star', '★'));
+      if (item.bookmarked) { const star = span('sg-star', ''); star.append(icon('star', true)); star.title = 'Bookmarked'; el.append(star); }
     } else {
       text.append(span('sg-title', `Search Google for “${typed}”`));
       el.append(span('icon ph', ''), text);

@@ -1,10 +1,12 @@
 import type { SuperbrowserApi } from '../preload/ui.ts';
+import { fillIcons } from './parts/icons.ts';
 
 declare global {
   interface Window { superbrowser: SuperbrowserApi }
 }
 
 const sb = window.superbrowser;
+fillIcons(document);
 const text = document.getElementById('text') as HTMLInputElement;
 const count = document.getElementById('count')!;
 const prev = document.getElementById('prev') as HTMLButtonElement;

@@ -20,6 +20,20 @@ export function faviconIcon(favicon: string | null | undefined): HTMLElement {
   return img;
 }
 
+/**
+ * Makes a clickable row reachable and usable from the keyboard: it joins the Tab order and Enter or Space on it acts
+ * as a click (⌘ held carries over, e.g. ⌘Enter opens a library row in a new tab). Keys typed in a field inside the
+ * row (an inline rename) are left alone.
+ */
+export function activatable(node: HTMLElement): void {
+  node.tabIndex = 0;
+  node.addEventListener('keydown', (e) => {
+    if (e.target !== node || e.isComposing || (e.key !== 'Enter' && e.key !== ' ')) return;
+    e.preventDefault();
+    node.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, metaKey: e.metaKey }));
+  });
+}
+
 /** The current profile pill or active pin tile: the `on` look plus `aria-current` for assistive tech (removed when not). */
 export function markCurrent(node: HTMLElement, on: boolean): void {
   node.classList.toggle('on', on);

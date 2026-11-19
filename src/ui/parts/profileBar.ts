@@ -1,5 +1,6 @@
 import type { SuperbrowserApi } from '../../preload/ui.ts';
 import { keyedMoves } from '../../core/reorder.ts';
+import { textOn } from '../../core/colors.ts';
 import type { UiProfile, UiState } from '../../shared/types.ts';
 import { el, markCurrent } from './dom.ts';
 import { setupProfileDrag } from './profileDrag.ts';
@@ -87,6 +88,7 @@ export function setupProfileBar(opts: { bar: HTMLElement; sb: SuperbrowserApi })
     const dot = pill.querySelector<HTMLElement>('.dot')!;
     dot.textContent = p.initials;
     dot.style.background = p.color;
+    dot.style.color = textOn(p.color); // dark initials on a light profile colour
     pill.querySelector('.n')!.textContent = p.name;
   }
 
@@ -136,6 +138,7 @@ export function setupProfileBar(opts: { bar: HTMLElement; sb: SuperbrowserApi })
     markCurrent(holder, dir === activeProfile);
     const dot = el('span', 'dot', p.initials);
     dot.style.background = p.color;
+    dot.style.color = textOn(p.color); // dark initials on a light profile colour
     const input = el('input', 'pf-edit');
     input.type = 'text';
     input.spellcheck = false;

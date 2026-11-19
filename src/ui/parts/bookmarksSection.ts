@@ -2,6 +2,7 @@ import type { SuperbrowserApi } from '../../preload/ui.ts';
 import type { BookmarkNode, LibraryReply } from '../../shared/types.ts';
 import { ancestorFolders, searchBookmarks } from '../../core/bookmarks.ts';
 import { el, faviconIcon as icon } from './dom.ts';
+import { icon as lineIcon } from './icons.ts';
 import { blurWithin, emptyRow, escClearsSearch, opensOnClick, row, type SectionHandle } from './libraryRows.ts';
 
 /**
@@ -41,16 +42,20 @@ export function setupBookmarksSection(opts: { sb: SuperbrowserApi; root: HTMLEle
       return bookmarkRow(r, n.id, n.title);
     }
     const isOpen = () => openFolders.has(n.id);
-    const arrow = el('span', 'fd', isOpen() ? '▾' : '▸');
+    const arrow = el('span', 'fd');
+    arrow.append(lineIcon('chevron'));
     const r = bookmarkRow(row(arrow, n.title || 'Untitled', null), n.id, n.title);
     const kids = el('div', 'bm-kids');
     kids.hidden = !isOpen();
+    r.classList.toggle('open', isOpen());
+    r.setAttribute('aria-expanded', String(isOpen()));
     kids.append(...n.children.map(treeNode));
     r.addEventListener('click', (e) => {
       if (e.button !== 0) return;
       if (isOpen()) openFolders.delete(n.id); else openFolders.add(n.id);
       kids.hidden = !isOpen();
-      arrow.textContent = isOpen() ? '▾' : '▸';
+      r.classList.toggle('open', isOpen());
+      r.setAttribute('aria-expanded', String(isOpen()));
     });
     const wrap = el('div', 'bm-folder');
     wrap.append(r, kids);

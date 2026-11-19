@@ -1,5 +1,6 @@
 import type { SuperbrowserApi } from '../preload/ui.ts';
 import { setupSuggestions } from './parts/suggestions.ts';
+import { fillIcons } from './parts/icons.ts';
 import type { UiState } from '../shared/types.ts';
 
 declare global {
@@ -20,6 +21,7 @@ const forwardBtn = byId<HTMLButtonElement>('forward');
 const reloadBtn = byId<HTMLButtonElement>('reload');
 
 let current: UiState | null = null;
+fillIcons(document);
 
 /** Room below the card for its shadow. */
 const SHADOW_PX = 24;

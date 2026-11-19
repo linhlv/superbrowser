@@ -11,17 +11,17 @@
   <div class="drag"></div>
   <div id="tabs">
     <div id="tablist"></div>
-    <div id="newtab">+  New Tab</div>
+    <button id="newtab" type="button" title="New Tab ⌘T"><span class="nt-ic" data-icon="plus"></span>New Tab</button>
   </div>
   <section class="sec" id="sec-bookmarks">
-    <button class="sec-h" title="Bookmarks ⌥⌘B"><span class="sec-a">▸</span>Bookmarks</button>
+    <button class="sec-h" title="Bookmarks ⌥⌘B" aria-expanded="false"><span class="sec-a" data-icon="chevron"></span>Bookmarks</button>
     <div class="sec-b">
       <input class="sec-search" type="search" spellcheck="false" autocomplete="off" placeholder="Search bookmarks">
       <div class="sec-list"></div>
     </div>
   </section>
   <section class="sec" id="sec-history">
-    <button class="sec-h" title="History ⌘Y"><span class="sec-a">▸</span>History</button>
+    <button class="sec-h" title="History ⌘Y" aria-expanded="false"><span class="sec-a" data-icon="chevron"></span>History</button>
     <div class="sec-b">
       <input class="sec-search" type="search" spellcheck="false" autocomplete="off" placeholder="Search history">
       <div class="sec-list"></div>
@@ -33,9 +33,9 @@
   </section>
 </aside>
 <footer id="bar">
-  <button id="toggle" title="Show/hide sidebar ⌘S">◧</button>
+  <button id="toggle" title="Show/hide sidebar ⌘S" aria-label="Show or hide sidebar" data-icon="sidebar"></button>
   <div id="profiles"></div>
-  <button id="addprofile" title="Import or Create Profile">+</button>
+  <button id="addprofile" title="Import or Create Profile" aria-label="Import or create profile" data-icon="plus"></button>
   <div id="pins"></div>
 </footer>
 <script src="ui.js"></script>

@@ -9,6 +9,8 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: transparent;
 #text::placeholder { color: rgba(0,0,0,.4); }
 #count { flex: none; color: rgba(0,0,0,.55); font-variant-numeric: tabular-nums; padding: 0 6px; }
 #count.none { color: #c5221f; }
-button { flex: none; width: 26px; height: 26px; padding: 0; border: 0; border-radius: 6px; background: none; font: inherit; font-size: 15px; color: inherit; }
+button { flex: none; width: 26px; height: 26px; padding: 0; border: 0; border-radius: 6px; background: none; font: inherit; color: inherit; display: grid; place-items: center; }
+.ic { display: block; width: 16px; height: 16px; }
+:focus-visible { outline: 2px solid #0a64d6; outline-offset: -2px; }
 button:hover:not(:disabled) { background: rgba(0,0,0,.08); }
 button:disabled { opacity: .3; }
