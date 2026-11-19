@@ -43,6 +43,8 @@ export class TabManager {
   private readonly pageHost: PageHost;
   /** Told about every tab's navigations, titles and favicons (history). */
   private readonly visits: VisitSink;
+  /** Told when a tab's page enters or leaves HTML full screen (it then covers the whole window). */
+  onFullScreen: ((on: boolean) => void) | null = null;
   /** Tabs from saved state or reopened, whose first load (when their view is created) is not a new visit. */
   private readonly restoredIds = new Set<number>();
 
@@ -312,11 +314,13 @@ export class TabManager {
     this.fullScreenId = id;
     view.setBorderRadius(0);
     view.setBounds(this.windowRect());
+    this.onFullScreen?.(true);
   }
 
   private leaveFullScreen(id: number): void {
     if (this.fullScreenId !== id) return;
     this.fullScreenId = null;
+    this.onFullScreen?.(false);
     const view = this.views.get(id);
     if (!view) return;
     view.setBorderRadius(10);

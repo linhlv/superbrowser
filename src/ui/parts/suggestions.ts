@@ -31,7 +31,6 @@ export function setupSuggestions(opts: {
     selected = -1;
     list.replaceChildren();
     list.hidden = true;
-    toggled();
   }
 
   /** Closes the list and invalidates any request still in flight. */
@@ -39,6 +38,7 @@ export function setupSuggestions(opts: {
     seq++;
     typed = '';
     hide();
+    toggled();
   }
 
   function submit(input: string): void {
@@ -80,8 +80,10 @@ export function setupSuggestions(opts: {
   address.addEventListener('input', (e) => {
     lastInputType = (e as InputEvent).inputType ?? '';
     typed = address.value;
-    hide(); // old rows must not stay selectable while the field shows newer text
-    if (typed.trim() === '') { seq++; return; }
+    // Old rows must not stay selectable while the field shows newer text. The space they took stays reserved until the
+    // reply (onToggle is not called), so the toolbar doesn't shrink and grow again on every keystroke.
+    hide();
+    if (typed.trim() === '') { seq++; toggled(); return; }
     sb.send({ type: 'suggest', seq: ++seq, text: typed });
   });
 

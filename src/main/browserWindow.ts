@@ -60,24 +60,36 @@ export class Toolbar {
   private readonly win: BrowserWindow;
   /** What the page asked for: 0 for just the strip, else the height down to the suggestions card. */
   private height = 0;
+  private sidebarVisible = true;
 
   constructor(win: BrowserWindow, log: (msg: string) => void) {
     this.win = win;
     this.view = createPageView(win, 'toolbar.html', log);
+    // A crashed or reloading page can't ask to shrink: never leave a transparent view over the page.
+    const reset = () => this.setHeight(0);
+    this.view.webContents.on('render-process-gone', reset);
+    this.view.webContents.on('did-start-loading', reset);
   }
 
   get expanded(): boolean { return this.height > TOP_H; }
 
   /** The page asked for a new height: grows (and rises over the tabs) or shrinks back to the strip. */
-  setHeight(height: number, sidebarVisible: boolean): void {
+  setHeight(height: number): void {
     const wasExpanded = this.expanded;
     this.height = height;
     if (this.expanded && !wasExpanded) this.win.contentView.addChildView(this.view); // to the top
     else if (!this.expanded && wasExpanded) this.win.contentView.addChildView(this.view, 1); // back above the UI view
-    this.layout(sidebarVisible);
+    this.layout(this.sidebarVisible);
+  }
+
+  /** A page in HTML full screen covers the strip; hidden meanwhile so its drag region can't catch clicks on the page. */
+  setPageFullScreen(on: boolean): void {
+    this.view.setVisible(!on);
   }
 
   layout(sidebarVisible: boolean): void {
+    this.sidebarVisible = sidebarVisible;
+    if (this.win.isDestroyed()) return;
     const [width = 0, height = 0] = this.win.getContentSize();
     this.view.setBounds(toolbarBounds({ width, height }, sidebarVisible, this.height));
   }

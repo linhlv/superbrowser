@@ -305,6 +305,7 @@ function start(): void {
       }).popup({ window });
     };
 
+    tabs.onFullScreen = (on) => toolbar.setPageFullScreen(on);
     const relayout = () => layoutWindow(window, ui, toolbar, findBar, tabs, state.sidebarVisible);
     relayout();
 
@@ -633,7 +634,7 @@ function start(): void {
         case 'bookmarks':
           toUi(IPC.library, libraryReply(cmd));
           break;
-        case 'toolbarHeight': toolbar.setHeight(cmd.height, state.sidebarVisible); break;
+        case 'toolbarHeight': toolbar.setHeight(cmd.height); break;
         case 'openUrl':
           if (cmd.newTab) tabs.newTab(cmd.url);
           else tabs.navigate(cmd.url);
@@ -670,10 +671,11 @@ function start(): void {
       });
     };
     const isFind = (cmd: UiCommand) => cmd.type === 'find' || cmd.type === 'findClose';
-    const toolbarCommands = new Set<UiCommand['type']>(['back', 'forward', 'reload', 'navigate', 'suggest', 'toolbarHeight']);
-    const isToolbarOnly = (cmd: UiCommand) => cmd.type === 'navigate' || cmd.type === 'suggest' || cmd.type === 'toolbarHeight';
-    listen(ui, (cmd) => !isFind(cmd) && !isToolbarOnly(cmd));
-    listen(toolbar.view, (cmd) => toolbarCommands.has(cmd.type));
+    /** Only the toolbar sends these; it also sends back, forward and reload, which the sidebar's menus don't need. */
+    const toolbarOnly = new Set<UiCommand['type']>(['navigate', 'suggest', 'toolbarHeight']);
+    const isToolbar = (cmd: UiCommand) => toolbarOnly.has(cmd.type) || cmd.type === 'back' || cmd.type === 'forward' || cmd.type === 'reload';
+    listen(ui, (cmd) => !isFind(cmd) && !toolbarOnly.has(cmd.type));
+    listen(toolbar.view, isToolbar);
     listen(findBar.view, isFind);
     ui.webContents.on('did-finish-load', pushState);
     toolbar.view.webContents.on('did-finish-load', pushState);

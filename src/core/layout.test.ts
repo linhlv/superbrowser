@@ -35,8 +35,8 @@ test('restoreBounds without saved bounds uses the fallback', () => {
 });
 
 test('findBarBounds: 320×44, 8 px from the tab rect\'s top and right edges', () => {
-  assert.deepEqual(findBarBounds({ x: 240, y: 8, width: 1152, height: 852 }), { x: 1064, y: 16, width: 320, height: 44 });
-  assert.deepEqual(findBarBounds({ x: 8, y: 8, width: 1384, height: 852 }), { x: 1064, y: 16, width: 320, height: 44 });
+  assert.deepEqual(findBarBounds({ x: 240, y: 44, width: 1152, height: 812 }), { x: 1064, y: 52, width: 320, height: 44 });
+  assert.deepEqual(findBarBounds({ x: 8, y: 44, width: 1384, height: 812 }), { x: 1064, y: 52, width: 320, height: 44 });
 });
 
 test('toolbarBounds: the strip above the page, as wide as the page', () => {

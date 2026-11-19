@@ -23,10 +23,13 @@ const reloadBtn = byId<HTMLButtonElement>('reload');
 let current: UiState | null = null;
 fillIcons(document);
 
-/** Room below the card for its shadow. */
-const SHADOW_PX = 24;
+/** Room below the card for its shadow (0 8px 24px blur). */
+const SHADOW_PX = 32;
 let sentHeight = 0;
-/** Tells main how tall the view must be: 0 (just the strip) with the card closed, else down to the card's shadow. */
+/**
+ * Tells main how tall the view must be: 0 (just the strip) with the card closed, else down to the card's shadow. While
+ * a keystroke's reply is pending the card is hidden but this isn't called, so the view keeps its size meanwhile.
+ */
 function reportHeight(): void {
   const height = list.hidden ? 0 : Math.ceil(list.getBoundingClientRect().bottom) + SHADOW_PX;
   if (height === sentHeight) return;

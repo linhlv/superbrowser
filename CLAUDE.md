@@ -53,7 +53,7 @@ New logic belongs in `src/core` with a test; keep `src/main` to wiring. Tests si
 Window structure: one `BrowserWindow`. Its child views stack in insertion order:
 
 - the UI view first, filling the window;
-- the toolbar view (`Toolbar` in `browserWindow.ts`), a 44 px strip above the page (`toolbarBounds`). While the address suggestions are open it grows over the page (transparent except the card) and is raised to the top; when they close it shrinks back and returns to index 1, so a page in HTML full screen covers it;
+- the toolbar view (`Toolbar` in `browserWindow.ts`), a 44 px strip above the page (`toolbarBounds`). While the address suggestions are open it grows over the page (transparent except the card) and is raised to the top; when they close it shrinks back and returns to index 1. It is hidden while a page is in HTML full screen (`TabManager.onFullScreen`), and reset to the strip if its page crashes or reloads;
 - each tab's view on top, only the active one visible, starting below the strip (`tabBounds`, `TOP_H`);
 - the find bar view, re-raised whenever it is shown.
 
@@ -70,7 +70,7 @@ Popups are separate small windows (registered in `pages.ts`, `isPopupWindow`). T
 - **Pages get no privileged API.**
   - `src/preload/frame.ts` is registered per profile session. It runs in subframes because page views set `nodeIntegrationInSubFrames` (sandboxed, so pages still get no Node). It must never expose an API, IPC or `contextBridge.exposeInMainWorld` to pages. It only wraps `navigator.credentials` and `NavigatorUAData` via `executeInMainWorld`; the functions it runs there are serialized, so they use only their arguments (no module scope).
   - UI commands are listened for only on the UI, toolbar and find views' own `webContents.ipc`, and validated by `parseUiCommand`. The find view only accepts find commands; the toolbar view only back, forward, reload, navigate, suggest and its own height; the UI view not navigate, suggest or the toolbar height.
-  - Any `ipcMain` handler you add must reject senders that aren't the app's UI or find views.
+  - Any `ipcMain` handler you add must reject senders that aren't the app's UI, toolbar or find views.
 - **Chrome data is read-only.**
   - Never write to `~/Library/Application Support/Google/Chrome/**` or the "Chrome Safe Storage" Keychain item.
   - Copy a `Cookies` DB to a temp file before reading it.

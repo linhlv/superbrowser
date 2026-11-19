@@ -50,6 +50,9 @@ A spike (Electron 45.3.4, Chromium 156; scratchpad, not in the repo) showed:
   slim **bottom profile bar** across the whole window that stays visible when the
   sidebar is hidden; profile **dots only by default, name + ⌃N slide out on
   hover**, with a "Show Profile Names" option; **⌘S** hides/shows the sidebar;
+  *(Later changes: back/forward/reload and the address field moved to a toolbar
+  strip above the page, and pills no longer slide out on hover. See the plan's
+  "Deviations during execution" and `2026-11-19-bottom-bar-pins-display-names-design.md`.)*
   the window background tints with the active profile's color; page area has
   rounded corners inset from the window edge.
 
