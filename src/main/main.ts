@@ -1,13 +1,14 @@
 import path from 'node:path';
 import { app, BrowserWindow, Menu, type WebContentsView } from 'electron';
 import { chromeMajor, userAgent } from '../core/identity.ts';
-import { arrangeProfiles, hideProfile, mergeProfiles, moveProfile } from '../core/profiles.ts';
+import { mergeProfiles } from '../core/profiles.ts';
 import { createStore } from '../core/store.ts';
 import { barProfiles, parseUiCommand } from '../core/uiProtocol.ts';
-import { IPC, type Profile, type UiCommand, type UiState } from '../shared/types.ts';
+import { IPC, type UiCommand, type UiState } from '../shared/types.ts';
 import { createBrowserWindow, createUiView, FindBar, layoutWindow } from './browserWindow.ts';
 import { openProfileInChrome, readChromeProfiles } from './chrome.ts';
-import { buildMenu, buildProfileMenu, type MenuContext } from './menu.ts';
+import { buildMenu, type MenuContext } from './menu.ts';
+import { ProfileManager } from './profileManager.ts';
 import { configureSessions } from './sessions.ts';
 import { TabManager } from './tabManager.ts';
 
@@ -43,23 +44,6 @@ function start(): void {
     configureSessions({ log });
 
     state.knownProfiles = mergeProfiles(readChromeProfiles(), state.knownProfiles);
-    // Recomputed by profilesChanged() whenever the order or the hidden set changes.
-    let profiles: Profile[] = [];
-    let hiddenProfiles: Profile[] = [];
-    let profileDirs = new Set<string>();
-    const arrange = (): void => {
-      let arranged = arrangeProfiles(state.knownProfiles, state.profileOrder, state.hiddenProfiles);
-      if (arranged.visible.length === 0 && arranged.hidden.length > 0) {
-        log('every profile was hidden; showing them all');
-        state.hiddenProfiles = [];
-        arranged = arrangeProfiles(state.knownProfiles, state.profileOrder, []);
-      }
-      profiles = arranged.visible;
-      hiddenProfiles = arranged.hidden;
-      profileDirs = new Set(profiles.map((p) => p.dir));
-    };
-    arrange();
-    if (profiles.length === 0) log('no Chrome profiles found');
 
     const window = createBrowserWindow(state);
     win = window;
@@ -71,7 +55,7 @@ function start(): void {
       if (ui.webContents.isDestroyed()) return;
       const snap = tabs.snapshot();
       const uiState: UiState = {
-        profiles: barProfiles(profiles),
+        profiles: barProfiles(profiles.visible),
         activeProfile: snap.dir,
         tabs: snap.tabs,
         activeTabId: snap.activeTabId,
@@ -93,7 +77,17 @@ function start(): void {
       findBar.follow(tabs.activeWebContents()); // switching tab or profile closes the find bar
       pushState();
     }, log);
-    tabs.setProfiles(profiles.map((p) => p.dir), state.tabs);
+    const profiles = new ProfileManager({
+      state,
+      tabs,
+      window,
+      log,
+      rebuildMenu: () => rebuildMenu(),
+      saveAndPush: () => {
+        store.save(state);
+        pushState();
+      },
+    });
     const relayout = () => layoutWindow(window, ui, findBar, tabs, state.sidebarVisible);
     relayout();
 
@@ -171,53 +165,22 @@ function start(): void {
         const dir = tabs.snapshot().dir;
         if (dir) openProfileInChrome(dir, log);
       },
-      unhideProfile: (dir) => {
-        state.hiddenProfiles = state.hiddenProfiles.filter((d) => d !== dir);
-        profilesChanged();
-      },
+      unhideProfile: (dir) => profiles.unhide(dir),
       selectTab: (n) => tabs.selectTabByShortcut(n),
     };
     const rebuildMenu = (): void => {
-      Menu.setApplicationMenu(buildMenu({ ...menuActions, profiles, hiddenProfiles, showNames: state.showNames }));
-    };
-
-    /** After the order or the hidden set changed: bar, ⌃N, menu, accepted commands and the shown profile follow. */
-    const profilesChanged = (): void => {
-      arrange();
-      tabs.setProfiles(profiles.map((p) => p.dir), state.tabs); // a hidden profile's tabs stay (in state too)
-      rebuildMenu();
-      const first = profiles[0];
-      if (!profileDirs.has(tabs.snapshot().dir) && first) {
-        tabs.showProfile(first.dir); // saves and pushes via onChange
-      } else {
-        store.save(state);
-        pushState();
-      }
-    };
-
-    const showProfileMenu = (dir: string): void => {
-      const order = (step: -1 | 1) => moveProfile(state.knownProfiles, state.profileOrder, state.hiddenProfiles, dir, step);
-      const hidden = () => hideProfile(state.knownProfiles, state.hiddenProfiles, dir);
-      buildProfileMenu({
-        canMoveLeft: order(-1) !== null,
-        canMoveRight: order(1) !== null,
-        canHide: hidden() !== null,
-        move: (step) => {
-          const next = order(step);
-          if (next) { state.profileOrder = next; profilesChanged(); }
-        },
-        hide: () => {
-          const next = hidden();
-          if (next) { state.hiddenProfiles = next; profilesChanged(); }
-        },
-        openInChrome: () => openProfileInChrome(dir, log),
-      }).popup({ window });
+      Menu.setApplicationMenu(buildMenu({
+        ...menuActions,
+        profiles: profiles.visible,
+        hiddenProfiles: profiles.hidden,
+        showNames: state.showNames,
+      }));
     };
 
     const run = (cmd: UiCommand): void => {
       switch (cmd.type) {
         case 'selectProfile': tabs.showProfile(cmd.dir); break;
-        case 'profileMenu': showProfileMenu(cmd.dir); break;
+        case 'profileMenu': profiles.showMenu(cmd.dir); break;
         case 'selectTab': tabs.selectTab(cmd.id); break;
         case 'closeTab': tabs.closeTab(cmd.id); break;
         case 'newTab': tabs.newTab(); break;
@@ -234,10 +197,10 @@ function start(): void {
         case 'findClose': findBar.close(true); break;
       }
     };
-    // Validated against the profiles visible right now (profileDirs is reassigned on every change).
+    // Validated against the profiles visible right now (profiles.dirs is replaced on every change).
     const listen = (view: WebContentsView, accepts: (cmd: UiCommand) => boolean): void => {
       view.webContents.ipc.on(IPC.command, (_e, raw: unknown) => {
-        const cmd = parseUiCommand(raw, profileDirs);
+        const cmd = parseUiCommand(raw, profiles.dirs);
         if (cmd && accepts(cmd)) run(cmd);
         else log(`ignored invalid UI command ${describe(raw)}`);
       });
@@ -260,7 +223,7 @@ function start(): void {
     window.on('closed', () => { win = null; });
 
     rebuildMenu();
-    const first = profiles.find((p) => p.dir === state.activeProfile) ?? profiles[0];
+    const first = profiles.visible.find((p) => p.dir === state.activeProfile) ?? profiles.visible[0];
     if (first) tabs.showProfile(first.dir);
     store.save(state);
   });

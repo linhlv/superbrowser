@@ -85,3 +85,9 @@ export function hideProfile(all: Profile[], hidden: string[], dir: string): stri
   if (visible.length <= 1 || !visible.some((x) => x.dir === dir)) return null;
   return [...hidden, dir];
 }
+
+/** True when `hidden` hides every known profile (the bar would be empty): then show them all instead. */
+export function hidesEveryProfile(all: Profile[], hidden: string[]): boolean {
+  const hiddenSet = new Set(hidden);
+  return all.length > 0 && all.every((x) => hiddenSet.has(x.dir));
+}

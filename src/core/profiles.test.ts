@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { argbToHex, parseLocalState, mergeProfiles, arrangeProfiles, moveProfile, hideProfile } from './profiles.ts';
+import { argbToHex, parseLocalState, mergeProfiles, arrangeProfiles, moveProfile, hideProfile, hidesEveryProfile } from './profiles.ts';
 import type { Profile } from '../shared/types.ts';
 
 const p = (dir: string, name = dir, color = '#808080'): Profile => ({ dir, name, color });
@@ -108,4 +108,14 @@ test('hideProfile is null for the last visible profile, a hidden one or an unkno
   assert.equal(hideProfile([p('A')], [], 'A'), null);
   assert.equal(hideProfile(all, ['A'], 'A'), null);
   assert.equal(hideProfile(all, [], 'Z'), null);
+});
+
+test('hidesEveryProfile is true only when every known profile is hidden', () => {
+  const all = [p('A'), p('B')];
+  assert.equal(hidesEveryProfile(all, ['A', 'B']), true);
+  assert.equal(hidesEveryProfile(all, ['B', 'Z', 'A']), true);
+  assert.equal(hidesEveryProfile(all, ['A']), false);
+  assert.equal(hidesEveryProfile(all, ['Z']), false);
+  assert.equal(hidesEveryProfile(all, []), false);
+  assert.equal(hidesEveryProfile([], ['A']), false); // nothing known: nothing to show either way
 });

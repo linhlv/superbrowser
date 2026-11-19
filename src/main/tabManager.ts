@@ -22,6 +22,8 @@ export class TabManager {
   private readonly profiles = new Map<string, ProfileTabs>();
   private readonly views = new Map<number, WebContentsView>();
   private readonly live = new Map<number, { favicon: string | null; loading: boolean }>();
+  /** Profiles whose views play no sound (hidden ones), including views created later. */
+  private readonly muted = new Set<string>();
   private dirs: string[] = [];
   private activeDir: string | null = null;
   private shownId: number | null = null;
@@ -133,6 +135,15 @@ export class TabManager {
     this.activeWebContents()?.reload();
   }
 
+  /** Mutes or unmutes every created view of the profile, and views it creates from now on. */
+  setProfileMuted(dir: string, muted: boolean): void {
+    if (muted) this.muted.add(dir);
+    else this.muted.delete(dir);
+    for (const [id, view] of this.views) {
+      if (this.dirOf(id) === dir) view.webContents.setAudioMuted(muted);
+    }
+  }
+
   activeWebContents(): WebContents | null {
     const id = this.activeTab()?.id;
     return id === undefined ? null : this.views.get(id)?.webContents ?? null;
@@ -198,6 +209,7 @@ export class TabManager {
       webPreferences: { session: profileSession(dir), sandbox: true, contextIsolation: true },
     });
     view.setBorderRadius(10);
+    view.webContents.setAudioMuted(this.muted.has(dir));
     view.setVisible(false);
     view.setBounds(this.bounds);
     this.win.contentView.addChildView(view);
