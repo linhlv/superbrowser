@@ -1,5 +1,6 @@
 import path from 'node:path';
 import { app, BrowserWindow, Menu, Notification, type WebContents, type WebContentsView } from 'electron';
+import { toNavigableUrl } from '../core/address.ts';
 import { chromeMajor, userAgent } from '../core/identity.ts';
 import { mergeProfiles } from '../core/profiles.ts';
 import { createStore } from '../core/store.ts';
@@ -10,6 +11,8 @@ import { IPC, type DownloadState, type UiCommand, type UiState } from '../shared
 import { createBrowserWindow, createUiView, FindBar, layoutWindow } from './browserWindow.ts';
 import { newProfileInChrome, openProfileInChrome, readChromeProfiles } from './chrome.ts';
 import { ImportFlow } from './importFlow.ts';
+import { HistoryRecorder } from './historyRecorder.ts';
+import { Library } from './library.ts';
 import { buildAddProfileMenu, buildMenu, type MenuContext } from './menu.ts';
 import { isPopupWindow } from './pages.ts';
 import { ProfileManager } from './profileManager.ts';
@@ -33,12 +36,18 @@ const logFailure = (what: string) => (e: unknown): void => log(`${what} failed: 
 /** Startup loads each visible profile's active tab, the shown one first and the others this far apart. */
 const STARTUP_STAGGER_MS = 300;
 
+/** Visits older than the retention window are pruned when a profile's history opens, and this often after. */
+const HISTORY_PRUNE_INTERVAL_MS = 24 * 3600e3;
+
 /** Zoom levels (factor 1.2^level) step by half a level; Chromium allows factors 0.25–5. */
 const ZOOM_STEP = 0.5, MIN_ZOOM = -7.5, MAX_ZOOM = 8.5;
 
 function start(): void {
   const store = createStore(path.join(app.getPath('userData'), 'state.json'));
   const state = store.load();
+  // Each profile's bookmarks and history, opened on first use.
+  const library = new Library(app.getPath('userData'), log);
+  const recorder = new HistoryRecorder(library, log);
   let win: BrowserWindow | null = null;
   let downloads: DownloadState[] = [];
   /** Set once the UI exists; downloads only start from pages, after that. */
@@ -57,7 +66,9 @@ function start(): void {
       log(`could not save state: ${e instanceof Error ? e.message : String(e)}`);
     }
   });
+  app.on('will-quit', () => library.closeAll());
   app.on('window-all-closed', () => app.quit());
+  setInterval(() => library.pruneAll(), HISTORY_PRUNE_INTERVAL_MS).unref();
 
   const profileName = (dir: string): string => state.knownProfiles.find((p) => p.dir === dir)?.name ?? dir;
 
@@ -121,7 +132,7 @@ function start(): void {
       }
       findBar.follow(tabs.activeWebContents()); // switching tab or profile closes the find bar
       pushState();
-    }, log, profileName);
+    }, log, profileName, recorder);
     const profiles = new ProfileManager({
       state,
       tabs,
@@ -272,10 +283,14 @@ function start(): void {
         case 'selectTab': tabs.selectTab(cmd.id); break;
         case 'closeTab': tabs.closeTab(cmd.id); break;
         case 'newTab': tabs.newTab(); break;
-        case 'navigate':
+        case 'navigate': {
+          // Typed in the address field: the tab's next navigation ranks higher in suggestions.
+          const id = tabs.snapshot().activeTabId;
+          if (id !== null && toNavigableUrl(cmd.input) !== null) recorder.markTyped(id);
           tabs.navigate(cmd.input);
           tabs.activeWebContents()?.focus(); // like Chrome: the page, not the address field, has focus afterwards
           break;
+        }
         case 'back': tabs.back(); break;
         case 'forward': tabs.forward(); break;
         case 'reload': tabs.reload(); break;

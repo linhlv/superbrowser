@@ -5,7 +5,9 @@ import {
   activateTab, closeTab, emptyTabs, fromSaved, openTab, reopenClosed, tabIdForShortcut, toSaved, updateTab,
   type ProfileTabs, type TabRecord,
 } from '../core/tabs.ts';
+import type { Nav } from '../core/visits.ts';
 import type { UiTab } from '../shared/types.ts';
+import type { VisitSink } from './historyRecorder.ts';
 import { ERR_ABORTED, wirePage, type PageHost } from './pages.ts';
 import { pageWebPreferences } from './sessions.ts';
 
@@ -39,11 +41,18 @@ export class TabManager {
   private shuttingDown = false;
   /** Links and popups from a page open in the page's own profile (see `wirePage`). */
   private readonly pageHost: PageHost;
+  /** Told about every tab's navigations, titles and favicons (history). */
+  private readonly visits: VisitSink;
+  /** Tabs from saved state or reopened, whose first load (when their view is created) is not a new visit. */
+  private readonly restoredIds = new Set<number>();
 
-  constructor(win: BrowserWindow, onChange: () => void, log: (msg: string) => void, profileName: (dir: string) => string) {
+  constructor(
+    win: BrowserWindow, onChange: () => void, log: (msg: string) => void, profileName: (dir: string) => string, visits: VisitSink,
+  ) {
     this.win = win;
     this.onChange = onChange;
     this.log = log;
+    this.visits = visits;
     this.pageHost = {
       log,
       profileName,
@@ -59,7 +68,9 @@ export class TabManager {
     for (const dir of dirs) {
       if (!this.profiles.has(dir)) {
         const s = saved[dir];
-        this.profiles.set(dir, s ? fromSaved(s, () => this.nextId++) : emptyTabs());
+        const tabs = s ? fromSaved(s, () => this.nextId++) : emptyTabs();
+        for (const t of tabs.tabs) this.restoredIds.add(t.id);
+        this.profiles.set(dir, tabs);
       }
     }
     if (this.activeDir !== null && !this.dirs.includes(this.activeDir)) {
@@ -147,6 +158,7 @@ export class TabManager {
     const reopened = dir === null ? null : reopenClosed(this.profiles.get(dir)!);
     if (dir === null || !reopened) return;
     this.profiles.set(dir, reopened.state);
+    this.restoredIds.add(reopened.tab.id);
     this.createView(dir, reopened.tab);
     this.refreshVisibility();
     this.changed();
@@ -311,6 +323,7 @@ export class TabManager {
     this.win.contentView.addChildView(view);
     this.views.set(tab.id, view);
     this.live.set(tab.id, { favicon: null, loading: false });
+    this.visits.opened(dir, tab.id, this.restoredIds.delete(tab.id));
     this.wire(view, dir, tab.id);
     load(view.webContents, tab.url);
     return view;
@@ -320,6 +333,8 @@ export class TabManager {
     const view = this.views.get(id);
     this.views.delete(id);
     this.live.delete(id);
+    this.restoredIds.delete(id);
+    this.visits.closed(id);
     if (this.shownId === id) this.shownId = null;
     if (this.fullScreenId === id) this.fullScreenId = null;
     if (!view) return;
@@ -344,15 +359,28 @@ export class TabManager {
       Object.assign(entry, p);
       this.changed();
     };
-    wc.on('page-title-updated', (_e, title) => { if (current()) patch({ title }); });
+    wc.on('page-title-updated', (_e, title) => {
+      if (!current()) return;
+      patch({ title });
+      this.visits.titled(dir, wc.getURL(), title);
+    });
     wc.on('did-navigate', (_e, url) => {
       if (!current()) return;
       const entry = this.live.get(id);
       if (entry) entry.favicon = null;
       patch({ url });
+      this.visits.navigated(dir, id, navOf(wc, url));
     });
-    wc.on('did-navigate-in-page', (_e, url, isMainFrame) => { if (current() && isMainFrame) patch({ url }); });
-    wc.on('page-favicon-updated', (_e, favicons) => { if (current()) setLive({ favicon: favicons[0] ?? null }); });
+    wc.on('did-navigate-in-page', (_e, url, isMainFrame) => {
+      if (!current() || !isMainFrame) return;
+      patch({ url });
+      this.visits.navigated(dir, id, navOf(wc, url));
+    });
+    wc.on('page-favicon-updated', (_e, favicons) => {
+      if (!current()) return;
+      setLive({ favicon: favicons[0] ?? null });
+      if (favicons[0]) this.visits.favicon(dir, wc.getURL(), favicons[0]);
+    });
     wc.on('did-start-loading', () => { if (current()) setLive({ loading: true }); });
     wc.on('did-stop-loading', () => { if (current()) setLive({ loading: false }); });
     // No in-page error UI yet (Electron has no Chrome net-error page; the tab stays blank): at least leave a trace.
@@ -372,6 +400,12 @@ export class TabManager {
 function openContents(view: WebContentsView | undefined): WebContents | null {
   const wc = view?.webContents as WebContents | undefined;
   return wc && !wc.isDestroyed() ? wc : null;
+}
+
+/** The page's place in its session history, for telling a new visit from Back/Forward (`VisitTracker`). */
+function navOf(wc: WebContents, url: string): Nav {
+  const nh = wc.navigationHistory;
+  return { url, index: nh.getActiveIndex(), entries: nh.getAllEntries().map((e) => e.url) };
 }
 
 /** Failures are logged by the tab's `did-fail-load` listener (which also sees link clicks), so the rejection is only noise. */
