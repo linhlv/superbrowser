@@ -187,7 +187,7 @@ export function setupBookmarksSection(opts: { sb: SuperbrowserApi; root: HTMLEle
       blurWithin(root);
       reset();
     },
-    focusSearch() { if (open) search.focus(); },
+    focusSearch() { if (open) { search.focus(); search.select(); } },
     reveal(id) {
       if (!open) return;
       highlight = id;

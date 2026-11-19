@@ -13,6 +13,7 @@ import { downloadsOf } from '../core/downloads.ts';
 import { bookmarkMenuSpec, historyMenuSpec } from '../core/libraryMenus.ts';
 import { sectionToggle, withSection } from '../core/sections.ts';
 import { splitWords } from '../core/searchText.ts';
+import { trailingThrottle } from '../core/throttle.ts';
 import { inlineCompletion, rankSuggestions } from '../core/suggest.ts';
 import { barProfiles, parseUiCommand } from '../core/uiProtocol.ts';
 import {
@@ -49,8 +50,11 @@ const STARTUP_STAGGER_MS = 300;
 /** Visits older than the retention window are pruned when a profile's history opens, and this often after. */
 const HISTORY_PRUNE_INTERVAL_MS = 24 * 3600e3;
 
-/** History entries matching the typed words that suggestions are ranked from, and rows per history panel page. */
+/** History entries matching the typed words that suggestions are ranked from, and rows per History section page. */
 const SUGGEST_CANDIDATES = 50, HISTORY_PAGE_SIZE = 100;
+
+/** Visits and titles recorded in the shown profile reach the UI at most this often (trailing, so the last one lands). */
+const HISTORY_NOTICE_MS = 1500;
 
 /** Zoom levels (factor 1.2^level) step by half a level; Chromium allows factors 0.25–5. */
 const ZOOM_STEP = 0.5, MIN_ZOOM = -7.5, MAX_ZOOM = 8.5;
@@ -137,7 +141,7 @@ function start(): void {
     const toUi = (channel: string, ...args: unknown[]): void => {
       if (!ui.webContents.isDestroyed()) ui.webContents.send(channel, ...args);
     };
-    /** The shown profile's bookmarks or history changed: an open panel refetches. */
+    /** The shown profile's bookmarks or history changed: an open section refetches. */
     const libraryChanged = (): void => toUi(IPC.libraryChanged);
 
     const tabs: TabManager = new TabManager(window, () => {
@@ -195,6 +199,11 @@ function start(): void {
     // Bookmarks and history: every command and menu item acts on the profile shown when it arrives.
     const shownDir = (): string | null => tabs.snapshot().dir || null;
 
+    // A visit or title recorded in the shown profile (never another one): an open History section scrolled to the
+    // top and not searching refetches its first page. Not libraryChanged, which reloads everything unconditionally.
+    const historyNotice = trailingThrottle(() => toUi(IPC.historyRecorded), HISTORY_NOTICE_MS);
+    recorder.onRecorded = (dir) => { if (dir === shownDir()) historyNotice.call(); };
+
     /** `fn()`, or `fallback` if it throws (history that can't open, a failed write): logged, and the caller carries on. */
     const orElse = <T>(what: string, fallback: T, fn: () => T): T => {
       try {
@@ -231,6 +240,8 @@ function start(): void {
       if (r.request.open) {
         window.focus();
         ui.webContents.focus(); // so the section's search box can take the keyboard
+      } else if (ui.webContents.isFocused()) {
+        tabs.activeWebContents()?.focus(); // the folding section may hold the keyboard: give it to the page, not to nothing
       }
       toUi(IPC.panel, r.request);
     };
@@ -312,7 +323,7 @@ function start(): void {
       else log(`ignored renaming bookmark ${id}: not in the shown profile`);
     };
 
-    /** The main window's active tab (never a popup's): bookmarked unless it already is, then shown in the panel. */
+    /** The main window's active tab (never a popup's): bookmarked unless it already is, then shown in the Bookmarks section. */
     const bookmarkPage = (): void => {
       const snap = tabs.snapshot();
       const dir = snap.dir;

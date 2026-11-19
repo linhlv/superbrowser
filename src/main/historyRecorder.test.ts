@@ -99,3 +99,17 @@ test('library errors are logged, never thrown', () => {
   assert.equal(logs.length, 5);
   assert.ok(logs.every((m) => m.includes('disk on fire')), logs.join('\n'));
 });
+
+test('onRecorded reports the profile of each recorded visit, revisit and title, not favicons or restored loads', () => {
+  const seen: string[] = [];
+  recorder.onRecorded = (dir) => seen.push(dir);
+  recorder.opened('Profile 2', 1, true);
+  recorder.navigated('Profile 2', 1, nav('https://a.test/', 0, ['https://a.test/'])); // restored: not a visit
+  assert.deepEqual(seen, []);
+  recorder.navigated('Profile 2', 1, nav('https://b.test/', 1, ['https://a.test/', 'https://b.test/']));
+  recorder.navigated('Profile 2', 1, nav('https://a.test/', 0, ['https://a.test/', 'https://b.test/'])); // Back
+  recorder.titled('Profile 2', 'https://b.test/', 'B');
+  recorder.favicon('Profile 2', 'https://b.test/', 'https://b.test/favicon.ico');
+  recorder.titled('Default', 'about:blank', 'New Tab'); // not a web page: nothing recorded
+  assert.deepEqual(seen, ['Profile 2', 'Profile 2', 'Profile 2']);
+});

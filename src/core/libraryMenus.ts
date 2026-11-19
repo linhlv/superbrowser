@@ -8,7 +8,7 @@ export type LibraryMenuItem =
 
 /**
  * A bookmark: Open in New Tab, Copy Link, Rename…, Move to ▸ `choices`, Delete.
- * A folder: New Folder… (inside it), Rename…, Delete. Rename and New Folder edit inline in the panel.
+ * A folder: New Folder… (inside it), Rename…, Delete. Rename and New Folder edit inline in the Bookmarks section.
  */
 export function bookmarkMenuSpec(node: BookmarkNode, choices: { id: number; path: string }[]): LibraryMenuItem[] {
   if (node.kind === 'folder') {

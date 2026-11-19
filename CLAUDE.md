@@ -27,7 +27,7 @@ scripts/make-icon.sh              # resources/Superbrowser.png → resources/ico
   - address parsing, UA/client hints, Chrome profile parsing and merging;
   - state decode and atomic store, the tab model, layout maths, drag-to-reorder slot maths (`dragOrder.ts`) and keyed row reordering with fewest moves (`reorder.ts`);
   - cookie decryption and import planning, the permission policy and prompt queue;
-  - download names and the per-profile downloads list, context-menu spec, popup titles, UI command validation (`uiProtocol.ts`);
+  - download names and the per-profile downloads list, context-menu spec, popup titles, UI command validation (`uiProtocol.ts`), sidebar sections and the ⌘Y/⌥⌘B/⌘D decision (`sections.ts`), a trailing-edge throttle (`throttle.ts`);
   - bookmarks and history: the bookmark tree (`bookmarks.ts`, `bookmarkStore.ts`), history queries and retention (`history.ts`), visit recording rules (`visits.ts`), accent-insensitive matching (`searchText.ts`), address-bar suggestions (`suggest.ts`), parsing Chrome's `Bookmarks`/`AccountBookmarks`/`History` and import planning (`chromeLibrary.ts`), bookmark and history context menus (`libraryMenus.ts`). `address.ts` also has `isWebUrl` and `googleSearchUrl`; `store.ts` has `writeFileAtomic`.
 - **`src/main/`**: thin Electron adapters wired together in `main.ts`:
   - `sessions.ts`: per-profile session, UA, permissions, frame preload, downloads.
@@ -40,7 +40,7 @@ scripts/make-icon.sh              # resources/Superbrowser.png → resources/ico
   - `chrome.ts`: reads Chrome's `Local State`; opens a profile in Chrome.
   - `downloads.ts`.
   - `library.ts`: `Library`, the only access to each profile's `history.db` (`node:sqlite`) and `bookmarks.json`.
-  - `historyRecorder.ts`: records visits from tab navigation events.
+  - `historyRecorder.ts`: records visits from tab navigation events. `main.ts` turns each visit or title recorded in the shown profile into a throttled `IPC.historyRecorded` notice; an open History section at the top, not searching, refetches its first page. `libraryChanged` (edits, deletes, clears, imports) still reloads open sections unconditionally.
   - `libraryImport.ts`: copies Chrome's files to a temp dir and imports bookmarks and history (add-only).
 - **`src/preload/`**: `ui.ts` (contextBridge API for our UI pages) and `frame.ts` (per-session frame preload: passkey requests fail fast, `navigator.userAgentData` names Google Chrome).
 - **`src/ui/`**: the sidebar + bottom bar page (`index.html`, `ui.ts`) and the find bar (`find.html`, `find.ts`). Our own pages; CSP forbids inline styles/scripts. `src/ui/parts/` holds UI helper modules (`suggestions.ts`, `bookmarksSection.ts` and `historySection.ts` for the collapsible sections under the tabs, `libraryRows.ts` for their shared rows, `profileDrag.ts` for dragging profile pills, `dom.ts`) bundled into `ui.ts`; only `src/ui/*.ts` are entry points.

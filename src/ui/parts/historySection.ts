@@ -6,12 +6,15 @@ import { blurWithin, clock, emptyRow, escClearsSearch, formatDay, host, opensOnC
 
 const LOAD_MORE_WITHIN_PX = 200;
 const SEARCH_DELAY_MS = 150;
+/** A recorded visit refreshes the list only while it is scrolled no further than this from the top. */
+const NEAR_TOP_PX = 40;
 
 /**
  * The sidebar's History section: day groups, debounced search, older pages loaded as the list nears its bottom.
  * A folded section asks for nothing; a reply counts only while open and if its seq is the latest request's.
  */
-export function setupHistorySection(opts: { sb: SuperbrowserApi; root: HTMLElement }): SectionHandle {
+export function setupHistorySection(opts: { sb: SuperbrowserApi; root: HTMLElement }):
+  SectionHandle & { onHistoryRecorded(): void } {
   const { sb, root } = opts;
   const search = root.querySelector('.sec-search') as HTMLInputElement;
   const list = root.querySelector('.sec-list') as HTMLElement;
@@ -109,7 +112,7 @@ export function setupHistorySection(opts: { sb: SuperbrowserApi; root: HTMLEleme
       blurWithin(root);
       reset();
     },
-    focusSearch() { if (open) search.focus(); },
+    focusSearch() { if (open) { search.focus(); search.select(); } },
     onReply(r) {
       if (r.kind === 'historyPage' && open && r.seq === seq) onPage(r);
     },
@@ -119,5 +122,9 @@ export function setupHistorySection(opts: { sb: SuperbrowserApi; root: HTMLEleme
       if (open) request(null);
     },
     onLibraryChanged() { if (open) request(null); },
+    onHistoryRecorded() {
+      // A page just visited shows under Today, unless someone is searching or reading older days (no jump to the top).
+      if (open && search.value.trim() === '' && list.scrollTop <= NEAR_TOP_PX) request(null);
+    },
   };
 }

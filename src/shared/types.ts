@@ -43,4 +43,5 @@ export const IPC = {
   state: 'ui:state', command: 'ui:command', focusAddress: 'ui:focus-address',
   findResult: 'ui:find-result', findFocus: 'ui:find-focus',
   library: 'ui:library', libraryChanged: 'ui:library-changed', panel: 'ui:panel', startRename: 'ui:start-rename',
+  historyRecorded: 'ui:history-recorded',
 } as const;

@@ -14,6 +14,8 @@ export type SuperbrowserApi = {
   onLibrary(cb: (reply: LibraryReply) => void): void;
   /** The shown profile's bookmarks or history changed: refetch what is on screen. */
   onLibraryChanged(cb: () => void): void;
+  /** A visit or title was just recorded in the shown profile's history (throttled). */
+  onHistoryRecorded(cb: () => void): void;
   /** Show History, Show Bookmarks or Bookmark This Page from the menu. */
   onPanel(cb: (request: PanelRequest) => void): void;
   /** Edit this bookmark's or folder's name inline (Rename…, New Folder…). */
@@ -28,6 +30,7 @@ const api: SuperbrowserApi = {
   onFindResult: (cb) => { ipcRenderer.on(IPC.findResult, (_e, result: FindResult) => cb(result)); },
   onLibrary: (cb) => { ipcRenderer.on(IPC.library, (_e, reply: LibraryReply) => cb(reply)); },
   onLibraryChanged: (cb) => { ipcRenderer.on(IPC.libraryChanged, () => cb()); },
+  onHistoryRecorded: (cb) => { ipcRenderer.on(IPC.historyRecorded, () => cb()); },
   onPanel: (cb) => { ipcRenderer.on(IPC.panel, (_e, request: PanelRequest) => cb(request)); },
   onStartRename: (cb) => { ipcRenderer.on(IPC.startRename, (_e, id: number) => cb(id)); },
   send: (cmd) => ipcRenderer.send(IPC.command, cmd),

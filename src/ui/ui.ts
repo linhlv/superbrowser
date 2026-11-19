@@ -38,8 +38,9 @@ const sections = {
   bookmarks: { root: byId('sec-bookmarks'), handle: bookmarks },
   history: { root: byId('sec-history'), handle: history },
 };
-// Main's saved openSections apply once, from the first state; after that the clicks here and main's panel requests
-// decide, and main records both (later pushes may carry a value from before a click).
+// Main's saved openSections apply once, from the first state (which already reflects any panel request main sent
+// before it); after a header click only clicks and panel requests decide, and main records both (later pushes may
+// carry a value from before a click).
 let sectionsSettled = false;
 
 function setSection(section: Section, open: boolean): void {
@@ -60,7 +61,6 @@ for (const section of ['bookmarks', 'history'] as const) {
 }
 
 sb.onPanel((req) => {
-  sectionsSettled = true;
   setSection(req.panel, req.open);
   if (!req.open) return;
   sections[req.panel].handle.focusSearch();
@@ -71,6 +71,7 @@ sb.onLibrary((r) => {
   else { bookmarks.onReply(r); history.onReply(r); }
 });
 sb.onLibraryChanged(() => { bookmarks.onLibraryChanged(); history.onLibraryChanged(); });
+sb.onHistoryRecorded(() => history.onHistoryRecorded());
 sb.onStartRename((id) => bookmarks.startRename(id));
 
 backBtn.addEventListener('click', () => sb.send({ type: 'back' }));
@@ -82,6 +83,15 @@ byId('toggle').addEventListener('click', () => sb.send({ type: 'toggleSidebar' }
 
 // Tab rows are kept by id and updated in place, so hover (and the × under the mouse) survives state pushes.
 const tabRows = new Map<number, HTMLElement>();
+let scrolledToTab: number | null = null; // the active tab last scrolled into view
+
+/** Keeps the active tab's row visible in the (possibly capped) tab list. */
+function revealActiveTab(): void {
+  const id = current?.activeTabId ?? null;
+  if (id !== null) tabRows.get(id)?.scrollIntoView({ block: 'nearest' });
+}
+// The list's height changes when a section opens or folds, the window resizes or the sidebar is shown again.
+new ResizeObserver(revealActiveTab).observe(byId('tabs'));
 
 function createTabRow(id: number): HTMLElement {
   const row = el('div', 'tab');
@@ -124,6 +134,10 @@ function renderTabs(s: UiState): void {
   }
   for (const [id, row] of tabRows) {
     if (!seen.has(id)) { row.remove(); tabRows.delete(id); }
+  }
+  if (s.activeTabId !== scrolledToTab) { // a tab switch, ⌘T or a profile change; not every push
+    scrolledToTab = s.activeTabId;
+    revealActiveTab(); // `current` is already `s`
   }
 }
 

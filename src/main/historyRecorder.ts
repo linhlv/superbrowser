@@ -20,6 +20,8 @@ export class HistoryRecorder implements VisitSink {
   private readonly log: (msg: string) => void;
   private readonly now: () => number;
   private readonly tracker = new VisitTracker();
+  /** Called with the profile after a visit or title is recorded there (favicons don't count). */
+  onRecorded: (dir: string) => void = () => {};
 
   constructor(library: Pick<Library, 'history'>, log: (msg: string) => void, now: () => number = Date.now) {
     this.library = library;
@@ -41,12 +43,17 @@ export class HistoryRecorder implements VisitSink {
       const { kind, typed } = this.tracker.navigated(tabId, nav);
       if (kind === 'visit') this.library.history(dir).recordVisit(nav.url, this.now(), typed);
       else if (kind === 'revisit') this.library.history(dir).touch(nav.url, this.now());
+      else return;
+      this.onRecorded(dir);
     });
   }
 
   titled(dir: string, url: string, title: string): void {
     if (!isWebUrl(url)) return;
-    this.guard(`recording a title in ${dir}`, () => this.library.history(dir).setTitle(url, title));
+    this.guard(`recording a title in ${dir}`, () => {
+      this.library.history(dir).setTitle(url, title);
+      this.onRecorded(dir);
+    });
   }
 
   favicon(dir: string, url: string, favicon: string): void {
