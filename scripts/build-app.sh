@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Build Superbrowser.app (Electron, ad-hoc signed). Usage: scripts/build-app.sh [--install]
-# Output: build/Superbrowser-darwin-arm64/Superbrowser.app; --install copies it to ~/Applications.
+# Output: build/Superbrowser-darwin-arm64/Superbrowser.app; --install copies it to /Applications (removing an older
+# copy in ~/Applications, where earlier versions installed it).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -39,6 +40,7 @@ npx --no-install electron-packager "$STAGE" Superbrowser \
   --icon="$ROOT/resources/icon.icns" \
   --usage-description.Camera="Websites you allow can use your camera, for example Google Meet." \
   --usage-description.Microphone="Websites you allow can use your microphone, for example Google Meet." \
+  --usage-description.LocalNetwork="Websites can reach devices on your local network, for example a Home Assistant at 192.168.x.x." \
   --out="$ROOT/build" --overwrite --prune --quiet
 
 APP="$ROOT/build/Superbrowser-darwin-arm64/Superbrowser.app"
@@ -48,10 +50,10 @@ FINAL="$APP"
 
 if [ "$INSTALL" = 1 ]; then
   osascript -e 'quit app "Superbrowser"' >/dev/null 2>&1 || true
-  mkdir -p "$HOME/Applications"
+  rm -rf "/Applications/Superbrowser.app"
+  cp -R "$APP" "/Applications/Superbrowser.app"
   rm -rf "$HOME/Applications/Superbrowser.app"
-  cp -R "$APP" "$HOME/Applications/Superbrowser.app"
-  FINAL="$HOME/Applications/Superbrowser.app"
+  FINAL="/Applications/Superbrowser.app"
 fi
 
 echo "$FINAL"
