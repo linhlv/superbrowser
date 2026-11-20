@@ -110,7 +110,7 @@ Sites ask before using the camera, microphone, screen sharing, notifications, lo
 - **No Chrome extensions.** Use **Open This Profile in Chrome** for anything that needs one.
 - **claude.ai needs a fresh login.** Its login is tied to the device and doesn't import.
 - **Client hints are incomplete.** Electron sends `Sec-CH-UA` (which Superbrowser makes name Google Chrome) only with a page's own requests, not when a page is opened, and never sends the extra hints a site can ask for. Real Chrome sends both.
-- **Google may occasionally sign one browser out.** Chrome and Superbrowser share the same Google sessions. If Superbrowser gets signed out, use **Profiles ▸ Replace Logins from Chrome…**.
+- **A profile you use in Chrome at the same time can get signed out here.** Sites such as Google and Zalo end a copied login once both browsers use it, and Replace Logins only copies it again. Sign in to those sites in Superbrowser instead of importing. When Chrome ties a profile's Google login to the Mac (its Device Bound Sessions), the import doesn't copy Google at all and says so.
 - **Links to other apps don't open.** `mailto:`, `zoommtg:` and similar links do nothing. Copy the link, or use Chrome.
 - **blob: documents open in a small popup window,** not a tab. An example is a PDF a web app generates.
 - **No popup blocker.** A page can open windows without a click.

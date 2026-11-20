@@ -24,10 +24,15 @@ export type ImportFlowDeps = {
 // "Allow", not "Always Allow": the prompt comes from /usr/bin/security, so Always Allow would let any program
 // read Chrome's cookie key through it without asking.
 const EXPLANATION = 'Superbrowser will copy this profile\'s logins (cookies) from Google Chrome. macOS will ask to allow '
-  + 'access to “Chrome Safe Storage” — click Allow (not Always Allow). You can keep using these accounts in Chrome too; '
-  + 'Google may occasionally sign one of them out.';
+  + 'access to “Chrome Safe Storage” — click Allow (not Always Allow). A profile you also use in Chrome at the same time '
+  + 'can get signed out of some sites here; sign in to those sites in Superbrowser instead.';
 
 const logins = (n: number) => `${n} login${n === 1 ? '' : 's'}`;
+/** Appended to a result when its Google cookies were withheld (the profile's Chrome Google login is device-bound). */
+const withheldNote = (r: ImportResult) => (r.withheld > 0
+  ? ' Google sign-in not copied: Chrome ties this profile\'s Google login to this Mac, so a copy gets signed out. '
+    + 'Sign in to Google in Superbrowser.'
+  : '');
 
 /** The window-modal sheets around importing logins, and bookmarks and history, from Chrome. One import runs at a time. */
 export class ImportFlow {
@@ -49,13 +54,13 @@ export class ImportFlow {
       const profile = this.deps.activeProfile();
       if (!profile) return;
       if (mode === 'replace' && !await this.ask(
-        'Replace this profile\'s logins with Chrome\'s current ones? Use this if Superbrowser got signed out.',
+        'Replace this profile\'s logins with Chrome\'s current ones?',
         ['Replace', 'Cancel'],
       )) return;
       if (!await this.prepare()) return;
       try {
         const result = await this.importProfile(profile, mode);
-        await this.sheet('info', `Imported ${logins(result.set)} for ${profile.name}.`, `${result.skipped} skipped, ${result.failed} failed.`);
+        await this.sheet('info', `Imported ${logins(result.set)} for ${profile.name}.`, `${result.skipped} skipped, ${result.failed} failed.${withheldNote(result)}`);
       } catch (e) {
         await this.showError(e, profile);
       }
@@ -72,7 +77,7 @@ export class ImportFlow {
       for (const profile of profiles) {
         try {
           const r = await this.importProfile(profile, 'add');
-          lines.push(`${profile.name}: ${logins(r.set)} imported, ${r.skipped} skipped, ${r.failed} failed.`);
+          lines.push(`${profile.name}: ${logins(r.set)} imported, ${r.skipped} skipped, ${r.failed} failed.${withheldNote(r)}`);
         } catch (e) {
           failures++;
           lines.push(`${profile.name}: ${e instanceof Error ? e.message : String(e)}`);

@@ -78,6 +78,7 @@ Popups are separate small windows (registered in `pages.ts`, `isPopupWindow`). T
   - Import is add-only. Only the explicit, confirmed "Replace Logins" overwrites.
   - Chrome's `Bookmarks`, `AccountBookmarks` and `History` are copied to a temp dir, then read from the copy. Bookmarks and history import is add-only, one-way, separate from the logins import, and needs no Keychain access.
   - A cookie that can't be imported is skipped and counted; it never aborts the import.
+  - A device-bound Google login is never imported: when the profile's `Device Bound Sessions` (copied to a temp dir, like `Cookies`) lists a Google site (`bindsGoogle`), Google's cookies (`isGoogleHost`) are withheld before decryption and counted as `withheld`. An unreadable file counts as bound.
 - **Site permissions are never granted silently** (Electron's default allows everything); `policyFor` decides allow/ask/deny.
   - Only Allow decisions are persisted. Block lasts for the app run.
   - Prompts are tied to their tab: one pending prompt per tab, and a prompt from a page that navigated or closed is dropped.
