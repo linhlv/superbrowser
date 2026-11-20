@@ -109,6 +109,7 @@ Sites ask before using the camera, microphone, screen sharing, notifications, lo
 - **Bookmarks and history import is one-way and add-only.** Later changes in Chrome don't carry over, and Superbrowser keeps 90 days of history. Deleting in Superbrowser never touches Chrome.
 - **No Chrome extensions.** Use **Open This Profile in Chrome** for anything that needs one.
 - **claude.ai needs a fresh login.** Its login is tied to the device and doesn't import.
+- **Google may refuse to sign in here.** A fresh Google sign-in can end on "Couldn't sign you in — This browser or app may not be secure", because Google treats Superbrowser as an embedded browser. A profile whose Google login import was withheld can't get Google back until that changes; other profiles keep the Google login they imported.
 - **Client hints are incomplete.** Electron sends `Sec-CH-UA` (which Superbrowser makes name Google Chrome) only with a page's own requests, not when a page is opened, and never sends the extra hints a site can ask for. Real Chrome sends both.
 - **A profile you use in Chrome at the same time can get signed out here.** Sites such as Google and Zalo end a copied login once both browsers use it, and Replace Logins only copies it again. Sign in to those sites in Superbrowser instead of importing. When Chrome ties a profile's Google login to the Mac (its Device Bound Sessions), the import doesn't copy Google at all and says so.
 - **Links to other apps don't open.** `mailto:`, `zoommtg:` and similar links do nothing. Copy the link, or use Chrome.
