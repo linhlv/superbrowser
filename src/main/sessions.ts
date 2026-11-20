@@ -1,7 +1,8 @@
 import path from 'node:path';
-import { dialog, session, webContents, type BrowserWindow, type Session, type WebContents, type WebPreferences } from 'electron';
+import { app, dialog, session, webContents, type BrowserWindow, type Session, type WebContents, type WebPreferences } from 'electron';
 import type { AppState, Decision } from '../core/appState.ts';
-import { chromeMajor, rewriteClientHints, userAgent } from '../core/identity.ts';
+import { acceptLanguages, parseAcceptCh, platformVersion, withClientHints, type HintValues } from '../core/clientHints.ts';
+import { chromeMajor, userAgent } from '../core/identity.ts';
 import {
   describeRequest, permissionKeys, policyFor, PromptQueue, siteOrigin, storeAnswer, verdictFor,
   type PermissionPrompt, type Verdict,
@@ -48,10 +49,25 @@ export function profileSession(dir: string): Session {
   if (!context) throw new Error('configureSessions() must run before profileSession()');
 
   const s = session.fromPartition('persist:' + dir);
-  const chromeVersion = process.versions.chrome;
-  s.setUserAgent(userAgent(chromeMajor(chromeVersion)));
+  const hints = hintValues();
+  // Accept-Language and navigator.languages like Chrome's (each system language, then its base language).
+  s.setUserAgent(userAgent(hints.major), acceptLanguages(app.getPreferredSystemLanguages()));
+  // Client hints like Chrome's: on page loads too, and the high-entropy ones an origin asked for with Accept-CH
+  // (remembered per origin for this run, in this profile's session only).
+  const asked = new Map<string, Set<string>>();
+  s.webRequest.onHeadersReceived({ urls: ['https://*/*', 'http://*/*'] }, (details, callback) => {
+    if (details.resourceType === 'mainFrame' || details.resourceType === 'subFrame') {
+      const acceptCh = Object.entries(details.responseHeaders ?? {}).find(([k]) => k.toLowerCase() === 'accept-ch')?.[1];
+      if (acceptCh !== undefined) {
+        const origin = originOf(details.url);
+        if (origin !== null) asked.set(origin, new Set(parseAcceptCh(acceptCh.join(','))));
+      }
+    }
+    callback({});
+  });
   s.webRequest.onBeforeSendHeaders((details, callback) => {
-    callback({ requestHeaders: rewriteClientHints(details.requestHeaders, chromeVersion) });
+    const requested = asked.get(originOf(details.url) ?? '') ?? new Set<string>();
+    callback({ requestHeaders: withClientHints(details.requestHeaders, details.url, hints, requested) });
   });
   installPermissionHandlers(s, dir);
   // Popups and background profiles included: every download of this profile is saved and listed.
@@ -62,6 +78,26 @@ export function profileSession(dir: string): Session {
   sessions.set(dir, s);
   context.log(`session ready for profile ${dir}`);
   return s;
+}
+
+/** The values client hints carry, from this Electron's Chromium and this Mac. */
+function hintValues(): HintValues {
+  const fullVersion = process.versions.chrome;
+  return {
+    major: chromeMajor(fullVersion),
+    fullVersion,
+    platformVersion: platformVersion(process.getSystemVersion()),
+    arch: process.arch === 'arm64' ? 'arm' : 'x86',
+    bitness: '64',
+  };
+}
+
+function originOf(url: string): string | null {
+  try {
+    return new URL(url).origin;
+  } catch {
+    return null;
+  }
 }
 
 /**
