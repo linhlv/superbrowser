@@ -10,7 +10,7 @@ Requires macOS on Apple Silicon, Google Chrome (for profiles and login import), 
 scripts/build-app.sh --install
 ```
 
-This runs the tests, builds `build/Superbrowser-darwin-arm64/Superbrowser.app` (ad-hoc signed), quits a running Superbrowser and replaces `~/Applications/Superbrowser.app`. Without `--install` it only builds. Run it again to update, for example after bumping Electron (`npm install electron@latest`). The browser's user agent follows Electron's Chromium version automatically.
+This runs the tests, builds `build/Superbrowser-darwin-arm64/Superbrowser.app` (ad-hoc signed), quits a running Superbrowser and replaces `/Applications/Superbrowser.app` (and removes an older copy in `~/Applications`). Without `--install` it only builds. Run it again to update, for example after bumping Electron (`npm install electron@latest`). The browser's user agent follows Electron's Chromium version automatically.
 
 Each build has a new ad-hoc signature, so macOS forgets Superbrowser's camera, microphone and screen recording permissions after every rebuild or reinstall, and asks again the next time a site uses them.
 
@@ -110,7 +110,7 @@ Sites ask before using the camera, microphone, screen sharing, notifications, lo
 - **No Chrome extensions.** Use **Open This Profile in Chrome** for anything that needs one.
 - **claude.ai needs a fresh login.** Its login is tied to the device and doesn't import.
 - **Google may refuse to sign in here.** A fresh Google sign-in can end on "Couldn't sign you in — This browser or app may not be secure", because Google treats Superbrowser as an embedded browser. A profile whose Google login import was withheld can't get Google back until that changes; other profiles keep the Google login they imported.
-- **Client hints are incomplete.** Electron sends `Sec-CH-UA` (which Superbrowser makes name Google Chrome) only with a page's own requests, not when a page is opened, and never sends the extra hints a site can ask for. Real Chrome sends both.
+- **The Chrome version trails real Chrome.** Superbrowser presents itself as the Chrome version inside Electron (156 with Electron 45), usually one or two versions behind the Chrome you have installed.
 - **A profile you use in Chrome at the same time can get signed out here.** Sites such as Google and Zalo end a copied login once both browsers use it, and Replace Logins only copies it again. Sign in to those sites in Superbrowser instead of importing. When Chrome ties a profile's Google login to the Mac (its Device Bound Sessions), the import doesn't copy Google at all and says so.
 - **Links to other apps don't open.** `mailto:`, `zoommtg:` and similar links do nothing. Copy the link, or use Chrome.
 - **blob: documents open in a small popup window,** not a tab. An example is a PDF a web app generates.

@@ -1,7 +1,18 @@
 # Google sign-in inside Superbrowser: close the Chrome-identity gaps
 
-Status: 2026-11-20, the user approved **item 4 (don't copy device-bound Google logins) and item 5 (docs) only**.
-Items 1–3 (closing the identity gaps) are deferred; they stay here as the measured record. Size: a small change.
+Status: 2026-11-20, items 4 and 5 shipped first (plan `2026-11-20-withhold-device-bound-google-logins.md`). Later the
+same day, after Google still rejected a sign-in, the user asked for items 1–3 ("fix it"): plan
+`2026-11-20-google-sign-in-identity.md`. Size: a small change each.
+
+Calls made for items 1–3 (the builder's):
+- Header brand lists come from the version alone: Chromium's GREASE rule (`Not<c1>A<c2>Brand`, chars
+  ` (:-./);=?_` at seed%11 and (seed+1)%11, version 8/99/24 at seed%3, seed = major) reproduces what Electron 156 and
+  Chrome 158 send, so navigations get the same `Sec-CH-UA` subresources already carry.
+- High-entropy values: platform version from `process.getSystemVersion()` padded to three parts, arch `arm`/`x86`,
+  bitness `64`, model empty, wow64 `?0`, form factors `"Desktop"`: the values Chrome sent in the probe.
+- All page-world changes run in one serialized function, so one private registry makes every replaced function
+  report `function <name>() { [native code] }`, including `Function.prototype.toString` itself.
+- Languages: `session.setUserAgent(ua, languages)` with each system language followed by its base language.
 
 Calls made for items 4–5 (the builder's, stated to the user):
 - "Google's cookies" means hosts `google.com`, `google.<cc>`, `google.co.<cc>`, `google.com.<cc>`, `youtube.com` and

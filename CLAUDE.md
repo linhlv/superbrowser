@@ -13,7 +13,7 @@ node --test src/core/tabs.test.ts # one file
 npm run typecheck                 # tsc --noEmit
 npm run build                     # esbuild src → dist/ (main.cjs, preload/*.cjs, ui/*)
 npm start                         # build + run in Electron (dev; the menu bar says "Electron")
-scripts/build-app.sh [--install]  # tests, build, package build/Superbrowser-darwin-arm64/Superbrowser.app, ad-hoc sign; --install quits Superbrowser and replaces ~/Applications/Superbrowser.app
+scripts/build-app.sh [--install]  # tests, build, package build/Superbrowser-darwin-arm64/Superbrowser.app, ad-hoc sign; --install quits Superbrowser and replaces /Applications/Superbrowser.app (removing an old ~/Applications copy)
 scripts/make-icon.sh              # resources/Superbrowser.png → resources/icon.icns (commit both)
 ```
 
@@ -45,7 +45,7 @@ scripts/make-icon.sh              # resources/Superbrowser.png → resources/ico
   - `historyRecorder.ts`: records visits from tab navigation events. `main.ts` turns each visit or title recorded in the shown profile into a throttled `IPC.historyRecorded` notice; an open History section at the top, not searching, refetches its first page. `libraryChanged` (edits, deletes, clears, imports) still reloads open sections unconditionally.
   - `libraryImport.ts`: copies Chrome's files to a temp dir and imports bookmarks and history (add-only).
   - `main.ts` also wires pins: remembered tabs per pin (`rememberShown`, per run only), the pin's icon and title following its tab, and a pin click (`pinTarget`, then `showTab` or `showNewTab`), plus the toolbar's commands (suggestions, its height, a click passed through to the page).
-- **`src/preload/`**: `ui.ts` (contextBridge API for our UI pages) and `frame.ts` (per-session frame preload: passkey requests fail fast, `navigator.userAgentData` names Google Chrome).
+- **`src/preload/`**: `ui.ts` (contextBridge API for our UI pages) and `frame.ts` (per-session frame preload: runs core `presentAsChrome` from `pageIdentity.ts` in each page: passkey requests fail fast, `navigator.userAgentData` names Google Chrome, `window.chrome` and `navigator.languages` like Chrome's).
 - **`src/ui/`**: the sidebar + bottom bar page (`index.html`, `ui.ts`), the toolbar above the page (`toolbar.html`, `toolbar.ts`: back, forward, reload, address field and its suggestions) and the find bar (`find.html`, `find.ts`). Our own pages; CSP forbids inline styles/scripts. `src/ui/parts/` holds UI helper modules (`suggestions.ts` for the address suggestions, `bookmarksSection.ts` and `historySection.ts` for the collapsible sections right under the tabs, `libraryRows.ts` for their shared rows (and `setupRoving`: one Tab stop per list, arrow keys, focus kept across re-renders), `profileBar.ts` for the pills and inline display-name edit, `pinBar.ts` for the pin tiles, `icons.ts` for the inline SVG icon set (no text glyphs as icons), `profileDrag.ts` for dragging profile pills, `dom.ts`) bundled into the entry points; only `src/ui/*.ts` are entry points.
 - **`src/shared/types.ts`**: types and IPC channel names shared by main, preload and UI.
 
@@ -69,7 +69,7 @@ Popups are separate small windows (registered in `pages.ts`, `isPopupWindow`). T
   - Popups use `popupWindowOptions(dir)` (partition plus `PAGE_WEB_PREFERENCES`).
   - `windowOpenTarget` decides tab, popup or deny: `blob:` opens as a popup, and anything but http(s), `blob:` and `about:blank` is denied.
 - **Pages get no privileged API.**
-  - `src/preload/frame.ts` is registered per profile session. It runs in subframes because page views set `nodeIntegrationInSubFrames` (sandboxed, so pages still get no Node). It must never expose an API, IPC or `contextBridge.exposeInMainWorld` to pages. It only wraps `navigator.credentials` and `NavigatorUAData` via `executeInMainWorld`; the functions it runs there are serialized, so they use only their arguments (no module scope).
+  - `src/preload/frame.ts` is registered per profile session. It runs in subframes because page views set `nodeIntegrationInSubFrames` (sandboxed, so pages still get no Node). It must never expose an API, IPC or `contextBridge.exposeInMainWorld` to pages. It runs one function, `presentAsChrome` (`src/core/pageIdentity.ts`), via `executeInMainWorld`: it wraps `navigator.credentials`, `NavigatorUAData` and `navigator.languages`, fills `window.chrome`, and makes each replaced function (and `Function.prototype.toString`) read as native code. It is serialized, so it uses only its argument and page globals (no module scope); keep every page-world change inside it so they share its private registry.
   - UI commands are listened for only on the UI, toolbar and find views' own `webContents.ipc`, and validated by `parseUiCommand`. The find view only accepts find commands; the toolbar view only back, forward, reload, navigate, suggest, its own height and the bookmark star (`toggleBookmark`); the UI view not navigate, suggest, the toolbar height or the star.
   - Any `ipcMain` handler you add must reject senders that aren't the app's UI, toolbar or find views.
 - **Chrome data is read-only.**
@@ -85,6 +85,8 @@ Popups are separate small windows (registered in `pages.ts`, `isPopupWindow`). T
 - **Browser identity:**
   - UA `… Chrome/<major>.0.0.0 Safari/537.36`.
   - Client hints add `"Google Chrome"` to Electron's own brand list (`withChromeBrand`): Electron's GREASE brand and `"Chromium"` are kept, and the three take the order Chrome of that major uses. `Sec-CH-UA` gets `v="<major>"`, `Sec-CH-UA-Full-Version-List` the full version. The frame preload gives `navigator.userAgentData` (`brands`, `getHighEntropyValues`, `toJSON`) the same list. Never hard-code a brand list.
+  - Electron sends no hints on page loads and ignores `Accept-CH`, so `withClientHints` (`clientHints.ts`, wired in `sessions.ts`) adds the low-entropy three to every secure request and the high-entropy hints an origin asked for (per profile session, per origin, for the run). `chromeBrands` builds the list from the version (Chromium's GREASE rule).
+  - `Accept-Language` and `navigator.languages` are the system languages each followed by its base language (`acceptLanguages`), like Chrome's.
   - `<major>` is the major of `process.versions.chrome`.
   - Never automate sign-in.
 - **Profiles from Chrome:** a missing, unreadable or mid-write `Local State` (empty `info_cache`) keeps the profiles already known (`mergeProfiles`). Profiles deleted in Chrome stay until hidden. The bar is never empty.
