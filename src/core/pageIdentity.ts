@@ -1,6 +1,15 @@
 import type { Brand } from './identity.ts';
 
 /**
+ * A user-origin style sheet the frame preload adds to every page (`webFrame.insertCSS`, `cssOrigin: 'user'`, which
+ * beats the page's own `!important`). Chrome ignores `app-region` in a tab, but Electron turns a page's
+ * `app-region: drag` (a web app's title bar, e.g. Teams') into a window drag region: clicks there drag the window and
+ * a double-click zooms it. `initial` computes to `none`, so no element adds a region and the computed value is
+ * Chrome's default; `none` or `no-drag` would make every element a no-drag region.
+ */
+export const PAGE_USER_CSS = '*, ::before, ::after { -webkit-app-region: initial !important; app-region: initial !important; }';
+
+/**
  * What `presentAsChrome` needs; the frame preload computes it. `brands` empty: leave `userAgentData` alone.
  * `languages`: the Accept-Language list (`acceptLanguages`), which `navigator.languages` must match.
  */

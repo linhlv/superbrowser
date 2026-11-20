@@ -33,6 +33,8 @@ export function barPins(pins: Pin[], visible: Profile[], names: Record<string, s
 const isSeq = (v: unknown): v is number => Number.isInteger(v) && (v as number) >= 0;
 const isId = (v: unknown): v is number => Number.isInteger(v) && (v as number) > 0;
 const isText = (v: unknown, max: number): v is string => typeof v === 'string' && v.length <= max;
+/** A pin key (`dir|host`). */
+const isKey = (v: unknown): v is string => typeof v === 'string' && v !== '' && v.length <= 2048;
 const isUrl = (v: unknown): v is string => typeof v === 'string' && v.length <= 8192 && isWebUrl(v);
 
 type Obj = Record<string, unknown>;
@@ -84,7 +86,15 @@ export function parseUiCommand(raw: unknown, knownDirs: ReadonlySet<string>): Ui
       return isId(id) && isText(raw['title'], 1024) ? { type, id, title: raw['title'] } : null;
     case 'selectPin':
     case 'pinMenu':
-      return typeof raw['key'] === 'string' && raw['key'] !== '' && raw['key'].length <= 2048 ? { type, key: raw['key'] } : null;
+      return isKey(raw['key']) ? { type, key: raw['key'] } : null;
+    case 'reorderTab': {
+      const before = raw['before'];
+      return Number.isInteger(id) && (before === null || Number.isInteger(before)) ? { type, id: id as number, before: before as number | null } : null;
+    }
+    case 'reorderPin': {
+      const { key, before } = raw;
+      return isKey(key) && (before === null || isKey(before)) ? { type, key, before } : null;
+    }
     case 'tabMenu':
     case 'togglePinTab':
       return Number.isInteger(id) ? { type, id: id as number } : null;

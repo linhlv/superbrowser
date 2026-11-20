@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { addPin, decodePins, forgetUnpinned, keyOf, movePin, pinKey, pinLabel, pinTarget, rememberShown, tabPinState, withFavicon, withTitle, usableFavicon } from './pins.ts';
+import { addPin, decodePins, forgetUnpinned, keyOf, movePin, placePin, pinKey, pinLabel, pinTarget, rememberShown, tabPinState, withFavicon, withTitle, usableFavicon } from './pins.ts';
 import type { Pin } from './pins.ts';
 
 const pin = (dir: string, url: string, title = 't'): Pin => ({ dir, url, title, favicon: null });
@@ -126,4 +126,28 @@ test('withTitle: unchanged or empty gives the same array; a change touches only 
   assert.equal(out[0]!.title, 'New');
   assert.equal(out[1], ps[1]);
   assert.equal(ps[0]!.title, 'Old');
+});
+
+test('placePin: drops a shown pin before another shown pin, or after the last shown one', () => {
+  const ps = [pin('A', 'https://a.com/'), pin('B', 'https://b.com/'), pin('C', 'https://c.com/')];
+  const all = new Set(['A', 'B', 'C']);
+  assert.deepEqual(placePin(ps, 'C|c.com', 'A|a.com', all)!.map(keyOf), ['C|c.com', 'A|a.com', 'B|b.com']);
+  assert.deepEqual(placePin(ps, 'A|a.com', 'C|c.com', all)!.map(keyOf), ['B|b.com', 'A|a.com', 'C|c.com']);
+  assert.deepEqual(placePin(ps, 'A|a.com', null, all)!.map(keyOf), ['B|b.com', 'C|c.com', 'A|a.com']);
+});
+test('placePin: pins of hidden profiles keep their slots', () => {
+  const ps = [pin('A', 'https://a.com/'), pin('H', 'https://h.com/'), pin('B', 'https://b.com/'), pin('C', 'https://c.com/')];
+  const shown = new Set(['A', 'B', 'C']);
+  assert.deepEqual(placePin(ps, 'C|c.com', 'A|a.com', shown)!.map(keyOf), ['C|c.com', 'H|h.com', 'A|a.com', 'B|b.com']);
+  assert.deepEqual(placePin(ps, 'A|a.com', null, shown)!.map(keyOf), ['B|b.com', 'H|h.com', 'C|c.com', 'A|a.com']);
+});
+test('placePin: null when nothing changes or the move is invalid', () => {
+  const ps = [pin('A', 'https://a.com/'), pin('H', 'https://h.com/'), pin('B', 'https://b.com/')];
+  const shown = new Set(['A', 'B']);
+  assert.equal(placePin(ps, 'A|a.com', 'B|b.com', shown), null); // already right before B (H is not shown)
+  assert.equal(placePin(ps, 'B|b.com', null, shown), null);      // already last
+  assert.equal(placePin(ps, 'A|a.com', 'A|a.com', shown), null); // before itself
+  assert.equal(placePin(ps, 'H|h.com', 'A|a.com', shown), null); // hidden pin
+  assert.equal(placePin(ps, 'A|a.com', 'H|h.com', shown), null); // hidden before
+  assert.equal(placePin(ps, 'nope', null, shown), null);         // unknown
 });

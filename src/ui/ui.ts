@@ -3,6 +3,7 @@ import { setupBookmarksSection } from './parts/bookmarksSection.ts';
 import { setupHistorySection } from './parts/historySection.ts';
 import { setupPinBar } from './parts/pinBar.ts';
 import { setupProfileBar } from './parts/profileBar.ts';
+import { setupRowDrag } from './parts/rowDrag.ts';
 import { activatable, el, faviconIcon, isImageUrl, markCurrent } from './parts/dom.ts';
 import { fillIcons, icon } from './parts/icons.ts';
 import { readableTint } from '../core/colors.ts';
@@ -74,6 +75,13 @@ byId('toggle').addEventListener('click', () => sb.send({ type: 'toggleSidebar' }
 
 // Tab rows are kept by id and updated in place, so hover (and the × under the mouse) survives state pushes.
 const tabRows = new Map<number, HTMLElement>();
+let tabOrder = '';
+// Drag a row up or down to reorder the tabs; releasing outside the sidebar cancels.
+const tabDrag = setupRowDrag({
+  list: tabList, scroller: byId('tabs'), zone: byId('side'), axis: 'y', itemClass: 'tab',
+  keyOf: (row) => row.dataset['id'] ?? '',
+  drop: (id, before) => sb.send({ type: 'reorderTab', id: Number(id), before: before === null ? null : Number(before) }),
+});
 let scrolledToTab: number | null = null; // the active tab last scrolled into view
 
 /** Keeps the active tab's row visible in the (possibly capped) tab list. */
@@ -86,6 +94,7 @@ new ResizeObserver(revealActiveTab).observe(byId('tabs'));
 
 function createTabRow(id: number): HTMLElement {
   const row = el('div', 'tab');
+  row.dataset['id'] = String(id);
   // Before the ×: pins the tab's site to the bottom bar (or unpins it). Shown on hover, and always while pinned.
   const pin = el('button', 'pn');
   pin.tabIndex = -1; // like the ×: one Tab stop per row; the row's menu and Tab › Pinned to Bar do it from the keyboard
@@ -98,7 +107,7 @@ function createTabRow(id: number): HTMLElement {
   row.addEventListener('click', () => sb.send({ type: 'selectTab', id }));
   pin.addEventListener('click', (e) => { e.stopPropagation(); sb.send({ type: 'togglePinTab', id }); });
   close.addEventListener('click', (e) => { e.stopPropagation(); sb.send({ type: 'closeTab', id }); });
-  row.addEventListener('contextmenu', (e) => { e.preventDefault(); sb.send({ type: 'tabMenu', id }); }); // Pin to Bar, Close Tab
+  row.addEventListener('contextmenu', (e) => { e.preventDefault(); sb.send({ type: 'tabMenu', id }); }); // Pin to Bar, Move Up/Down, Close Tab
   activatable(row);
   tabRows.set(id, row);
   return row;
@@ -135,6 +144,9 @@ function updateTabRow(row: HTMLElement, tab: UiTab, active: boolean): void {
 }
 
 function renderTabs(s: UiState): void {
+  const order = s.tabs.map((t) => t.id).join(',');
+  if (order !== tabOrder) tabDrag.cancel(); // its measurements are stale once a row comes, goes or moves
+  tabOrder = order;
   const seen = new Set<number>();
   let prev: Element | null = null;
   for (const tab of s.tabs) {

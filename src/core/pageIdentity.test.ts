@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { Brand } from './identity.ts';
-import { presentAsChrome } from './pageIdentity.ts';
+import { PAGE_USER_CSS, presentAsChrome } from './pageIdentity.ts';
 
 const ELECTRON: Brand[] = [{ brand: 'Not:A-Brand', version: '8' }, { brand: 'Chromium', version: '156' }];
 const BRANDS: Brand[] = [...ELECTRON, { brand: 'Google Chrome', version: '156' }];
@@ -89,4 +89,12 @@ test('navigator.languages matches the Accept-Language list', () => {
   assert.equal(nav.languages, nav.languages, 'the same frozen array each time, like Chrome');
   assert.ok(Object.isFrozen(nav.languages));
   assert.equal(fnText(Object.getOwnPropertyDescriptor(Navigator.prototype, 'languages')!.get), 'function get languages() { [native code] }');
+});
+
+test('page user CSS resets app-region to its initial value, over any page rule', () => {
+  // `initial` computes to `none` (no region); `none` or `no-drag` would make every element a no-drag region.
+  for (const prop of ['-webkit-app-region', 'app-region']) {
+    assert.match(PAGE_USER_CSS, new RegExp(`(^|[;{\\s])${prop}: initial !important`));
+  }
+  assert.match(PAGE_USER_CSS, /^\*, ::before, ::after \{/);
 });

@@ -231,7 +231,10 @@ export function buildProfileMenu(ctx: ProfileMenuContext): Menu {
 export type TabMenuContext = {
   canPin: boolean; // false for a page that isn't http(s)
   pinned: boolean; // a pin with this tab's profile and host exists
+  canMoveUp: boolean;
+  canMoveDown: boolean;
   togglePin(): void;
+  move(step: -1 | 1): void;
   close(): void;
 };
 
@@ -240,6 +243,9 @@ export function buildTabMenu(ctx: TabMenuContext): Menu {
     ctx.pinned
       ? { label: 'Unpin from Bar', click: () => ctx.togglePin() }
       : { label: 'Pin to Bar', enabled: ctx.canPin, click: () => ctx.togglePin() },
+    { type: 'separator' },
+    { label: 'Move Up', enabled: ctx.canMoveUp, click: () => ctx.move(-1) },
+    { label: 'Move Down', enabled: ctx.canMoveDown, click: () => ctx.move(1) },
     { type: 'separator' },
     { label: 'Close Tab', click: () => ctx.close() },
   ]);

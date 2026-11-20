@@ -3,7 +3,7 @@ import { keyedMoves } from '../../core/reorder.ts';
 import { textOn } from '../../core/colors.ts';
 import type { UiProfile, UiState } from '../../shared/types.ts';
 import { el, markCurrent } from './dom.ts';
-import { setupProfileDrag } from './profileDrag.ts';
+import { setupRowDrag } from './rowDrag.ts';
 
 /** The pill's tooltip and accessible name: `ACME (⌃1)`, or `ACME — Chrome name (⌃1)` when a display name is set. */
 function pillLabel(p: UiProfile): string {
@@ -27,7 +27,7 @@ type Edit = {
 /**
  * The profile pills in `bar` (`#profiles`): one `<button class="pf">` per visible profile, kept by dir and updated in
  * place (like tab rows), so a hovered pill keeps its element across pushes, including the push that follows a drop.
- * Drag a pill to reorder it (profileDrag.ts); the click that ends a drag doesn't switch profile.
+ * Drag a pill to reorder it (rowDrag.ts); the click that ends a drag doesn't switch profile.
  *
  * `startEdit(dir)` edits that profile's display name inline. The button is swapped for a `.pf.pf-editing` holder
  * with the same dir, so the text field never sits inside a button (Space or Enter typed there would activate it).
@@ -44,7 +44,12 @@ export function setupProfileBar(opts: { bar: HTMLElement; sb: SuperbrowserApi })
   let profilesKey = '';
   let activeProfile = '';
   let editing: Edit | null = null;
-  const profileDrag = setupProfileDrag({ bar, send: (cmd) => sb.send(cmd) });
+  // Releasing anywhere in the bottom bar drops; releasing above it cancels.
+  const profileDrag = setupRowDrag({
+    list: bar, scroller: bar, zone: bar.parentElement ?? bar, axis: 'x', itemClass: 'pf',
+    keyOf: (pill) => pill.dataset['dir'] ?? '',
+    drop: (dir, before) => sb.send({ type: 'reorderProfile', dir, before }),
+  });
 
   // Whether the primary button is pressed in this page, and what waits for its release. Only the primary button
   // counts: a right-click opens a native menu that swallows its release, which would leave the flag stuck.
@@ -69,10 +74,7 @@ export function setupProfileBar(opts: { bar: HTMLElement; sb: SuperbrowserApi })
     pill.type = 'button';
     pill.dataset['dir'] = dir;
     pill.append(el('span', 'dot'), el('span', 'n'));
-    pill.addEventListener('click', () => {
-      if (profileDrag.suppressClick()) return;
-      sb.send({ type: 'selectProfile', dir });
-    });
+    pill.addEventListener('click', () => sb.send({ type: 'selectProfile', dir }));
     pill.addEventListener('contextmenu', (e) => {
       e.preventDefault();
       sb.send({ type: 'profileMenu', dir });

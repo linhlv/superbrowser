@@ -43,6 +43,28 @@ export function updateTab(s: ProfileTabs, id: number, patch: Partial<Pick<TabRec
   return { ...s, tabs: s.tabs.map((x) => (x.id === id ? { ...x, ...patch } : x)) };
 }
 
+/**
+ * Drops tab `id` just before tab `beforeId` (null: last), as a drag in the sidebar does. The active tab stays the same.
+ * Null when nothing would change or either tab is unknown.
+ */
+export function placeTab(s: ProfileTabs, id: number, beforeId: number | null): ProfileTabs | null {
+  const tab = s.tabs.find((x) => x.id === id);
+  if (!tab || beforeId === id) return null;
+  const rest = s.tabs.filter((x) => x.id !== id);
+  const at = beforeId === null ? rest.length : rest.findIndex((x) => x.id === beforeId);
+  if (at === -1) return null;
+  const tabs = [...rest.slice(0, at), tab, ...rest.slice(at)];
+  return tabs.every((x, i) => x === s.tabs[i]) ? null : { ...s, tabs };
+}
+
+/** Swaps tab `id` with its neighbour above (-1) or below (1). Null at either end or for an unknown tab. */
+export function moveTab(s: ProfileTabs, id: number, step: -1 | 1): ProfileTabs | null {
+  const i = s.tabs.findIndex((x) => x.id === id);
+  const neighbour = i === -1 ? undefined : s.tabs[i + step];
+  if (!neighbour) return null;
+  return placeTab(s, id, step === -1 ? neighbour.id : s.tabs[i + 2]?.id ?? null);
+}
+
 /** Chrome's ⌘1–⌘8 pick a position, ⌘9 the last tab. */
 export function tabIdForShortcut(s: ProfileTabs, n: number): number | null {
   const tab = n === 9 ? s.tabs.at(-1) : s.tabs[n - 1];

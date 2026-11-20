@@ -1,4 +1,4 @@
-// Slot maths for dragging an item along a row (the profile pills), measured once when the drag starts.
+// Slot maths for dragging an item along a row or column (pills, pin tiles, tab rows), measured once when the drag starts.
 
 /**
  * The slot (0…n-1 in the final row) that the dragged item at `from` lands in: one slot past every other item
@@ -13,7 +13,7 @@ export function dropBefore(ids: string[], from: number, to: number): string | nu
   return ids.filter((_, i) => i !== from)[to] ?? null;
 }
 
-/** Which way item `i` slides while the item at `from` hovers over slot `to`: -1 left, 1 right, 0 stays. */
+/** Which way item `i` slides while the item at `from` hovers over slot `to`: -1 left or up, 1 right or down, 0 stays. */
 export function slotShift(i: number, from: number, to: number): -1 | 0 | 1 {
   if (i > from && i <= to) return -1;
   if (i < from && i >= to) return 1;

@@ -7,7 +7,7 @@ import {
 import type { HistoryEntry } from '../core/history.ts';
 import { chromeMajor, userAgent } from '../core/identity.ts';
 import {
-  addPin, forgetUnpinned, keyOf, movePin, pinKey, pinLabel, pinTarget, rememberShown, removePin, tabPinState, withFavicon, withTitle, type Pin,
+  addPin, forgetUnpinned, keyOf, movePin, pinKey, placePin, pinLabel, pinTarget, rememberShown, removePin, tabPinState, withFavicon, withTitle, type Pin,
 } from '../core/pins.ts';
 import { mergeProfiles, profileLabel, setDisplayName, withDisplayNames } from '../core/profiles.ts';
 import { createStore } from '../core/store.ts';
@@ -312,7 +312,10 @@ function start(): void {
       buildTabMenu({
         canPin: pinKey(pin.dir, pin.url) !== null,
         pinned: isPinned(pin),
+        canMoveUp: tabs.canMoveTab(id, -1),
+        canMoveDown: tabs.canMoveTab(id, 1),
         togglePin: () => togglePin(pin),
+        move: (step) => tabs.moveTab(id, step),
         close: () => tabs.closeTab(id),
       }).popup({ window });
     };
@@ -638,6 +641,7 @@ function start(): void {
           break;
         case 'selectTab': tabs.selectTab(cmd.id); break;
         case 'closeTab': tabs.closeTab(cmd.id); break;
+        case 'reorderTab': tabs.placeTab(cmd.id, cmd.before); break;
         case 'newTab': tabs.newTab(); break;
         case 'navigate': {
           // Typed in the address field: the tab's next navigation ranks higher in suggestions.
@@ -686,6 +690,14 @@ function start(): void {
           break;
         }
         case 'pinMenu': showPinMenu(cmd.key); break;
+        case 'reorderPin': {
+          const next = placePin(state.pins, cmd.key, cmd.before, profiles.dirs);
+          if (next) {
+            state.pins = next;
+            pinsChanged();
+          }
+          break;
+        }
         case 'tabMenu': showTabMenu(cmd.id); break;
         case 'togglePinTab': {
           const pin = pinOfTab(cmd.id);

@@ -2,7 +2,7 @@ import { WebContentsView, type BrowserWindow, type WebContents } from 'electron'
 import { sameOrigin, toNavigableUrl } from '../core/address.ts';
 import type { Rect, SavedTabs } from '../core/appState.ts';
 import {
-  activateTab, closeTab, emptyTabs, fromSaved, openTab, reopenClosed, tabIdForShortcut, toSaved, updateTab,
+  activateTab, closeTab, emptyTabs, fromSaved, moveTab, openTab, placeTab, reopenClosed, tabIdForShortcut, toSaved, updateTab,
   type ProfileTabs, type TabRecord,
 } from '../core/tabs.ts';
 import type { Nav } from '../core/visits.ts';
@@ -176,6 +176,32 @@ export class TabManager {
     if (dir === null) return;
     this.profiles.set(dir, activateTab(this.profiles.get(dir)!, id));
     this.refreshVisibility();
+    this.changed();
+  }
+
+  /** Drops a tab of the shown profile just before another of its tabs (null: last). Nothing loads or reloads. */
+  placeTab(id: number, beforeId: number | null): void {
+    const dir = this.dirOf(id);
+    if (dir === null || dir !== this.activeDir) return;
+    this.reorder(dir, placeTab(this.profiles.get(dir)!, id, beforeId));
+  }
+
+  /** Whether `moveTab(id, step)` would move the tab (the tab menu's Move Up and Move Down). */
+  canMoveTab(id: number, step: -1 | 1): boolean {
+    const dir = this.dirOf(id);
+    return dir !== null && moveTab(this.profiles.get(dir)!, id, step) !== null;
+  }
+
+  /** Swaps a tab of the shown profile with its neighbour above (-1) or below (1). */
+  moveTab(id: number, step: -1 | 1): void {
+    const dir = this.dirOf(id);
+    if (dir === null || dir !== this.activeDir) return;
+    this.reorder(dir, moveTab(this.profiles.get(dir)!, id, step));
+  }
+
+  private reorder(dir: string, next: ProfileTabs | null): void {
+    if (next === null) return;
+    this.profiles.set(dir, next);
     this.changed();
   }
 

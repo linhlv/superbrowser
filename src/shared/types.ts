@@ -26,6 +26,8 @@ export type UiCommand =
   | { type: 'selectProfile'; dir: string } | { type: 'profileMenu'; dir: string }
   | { type: 'reorderProfile'; dir: string; before: string | null } | { type: 'addProfileMenu' }
   | { type: 'selectTab'; id: number } | { type: 'closeTab'; id: number } | { type: 'newTab' }
+  /** A tab row dropped just before tab `before` (null: last) in the shown profile. */
+  | { type: 'reorderTab'; id: number; before: number | null }
   | { type: 'navigate'; input: string } | { type: 'back' } | { type: 'forward' } | { type: 'reload' }
   | { type: 'toggleSidebar' } | { type: 'revealDownload'; id: string }
   | { type: 'find'; text: string; forward: boolean } | { type: 'findClose' }
@@ -37,6 +39,8 @@ export type UiCommand =
   | { type: 'bookmarkMenu'; id: number }
   | { type: 'renameBookmark'; id: number; title: string }
   | { type: 'selectPin'; key: string } | { type: 'pinMenu'; key: string }
+  /** A pin tile dropped just before pin `before` (null: after the last shown pin). */
+  | { type: 'reorderPin'; key: string; before: string | null }
   | { type: 'tabMenu'; id: number } | { type: 'setDisplayName'; dir: string; name: string }
   /** The tab row's pin button: pins the tab's site in the shown profile, or unpins it. */
   | { type: 'togglePinTab'; id: number }

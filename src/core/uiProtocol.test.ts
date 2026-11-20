@@ -63,6 +63,10 @@ test('parseUiCommand: accepts every well-formed command and keeps only its field
     { type: 'selectPin', key: 'Default|a.com' },
     { type: 'pinMenu', key: 'Default|a.com' },
     { type: 'tabMenu', id: 3 },
+    { type: 'reorderTab', id: 3, before: 1 },
+    { type: 'reorderTab', id: 3, before: null },
+    { type: 'reorderPin', key: 'Default|a.com', before: 'Default|b.com' },
+    { type: 'reorderPin', key: 'Default|a.com', before: null },
     { type: 'togglePinTab', id: 3 },
     { type: 'toggleBookmark' },
     { type: 'setDisplayName', dir: 'Default', name: 'ACME' },
@@ -163,4 +167,18 @@ test('parseUiCommand: toolbarClickThrough needs whole-pixel coordinates within 0
   for (const [x, y] of [[-1, 5], [5, -1], [10001, 5], [1.5, 5], ['5', 5], [5, null]]) {
     assert.equal(parseUiCommand({ type: 'toolbarClickThrough', x, y }, known), null, `${x},${y}`);
   }
+});
+
+test('parseUiCommand: rejects bad reorderTab and reorderPin', () => {
+  for (const raw of [
+    { type: 'reorderTab', id: 3 },                     // before missing
+    { type: 'reorderTab', id: 1.5, before: null },
+    { type: 'reorderTab', id: 3, before: '1' },
+    { type: 'reorderTab', id: 3, before: 2.5 },
+    { type: 'reorderPin', key: 'Default|a.com' },      // before missing
+    { type: 'reorderPin', key: '', before: null },
+    { type: 'reorderPin', key: 'Default|a.com', before: '' },
+    { type: 'reorderPin', key: 'Default|a.com', before: 3 },
+    { type: 'reorderPin', key: 'x'.repeat(2049), before: null },
+  ]) assert.equal(parseUiCommand(raw, known), null, JSON.stringify(raw));
 });

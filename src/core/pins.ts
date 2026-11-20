@@ -63,6 +63,23 @@ export function movePin(pins: Pin[], key: string, step: -1 | 1, shownDirs: Reado
   return out;
 }
 
+/**
+ * Drops the shown pin `key` just before the shown pin `beforeKey` (null: after the last shown one), as a drag in the
+ * bar does; pins of hidden profiles keep their slots. Null when nothing would change or the move is invalid.
+ */
+export function placePin(pins: Pin[], key: string, beforeKey: string | null, shownDirs: ReadonlySet<string>): Pin[] | null {
+  const shown = pins.filter((p) => shownDirs.has(p.dir));
+  const moving = shown.find((p) => keyOf(p) === key);
+  if (!moving || beforeKey === key) return null;
+  const rest = shown.filter((p) => p !== moving);
+  const at = beforeKey === null ? rest.length : rest.findIndex((p) => keyOf(p) === beforeKey);
+  if (at === -1) return null;
+  rest.splice(at, 0, moving);
+  if (rest.every((p, i) => p === shown[i])) return null;
+  let next = 0;
+  return pins.map((p) => (shownDirs.has(p.dir) ? rest[next++]! : p));
+}
+
 export function decodePins(v: unknown): Pin[] {
   if (!Array.isArray(v)) return [];
   const seen = new Set<string>();

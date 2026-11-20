@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  emptyTabs, openTab, closeTab, reopenClosed, activateTab, updateTab, tabIdForShortcut, toSaved, fromSaved,
+  emptyTabs, openTab, closeTab, placeTab, moveTab, reopenClosed, activateTab, updateTab, tabIdForShortcut, toSaved, fromSaved,
   popupWindowOptions, windowOpenTarget, isOpenableLink, PAGE_WEB_PREFERENCES, sameSavedTabs, popupTitle,
   type ProfileTabs, type TabRecord,
 } from './tabs.ts';
@@ -253,4 +253,32 @@ test('popupTitle: IDN hosts show as punycode; blob: shows its origin host; other
   assert.equal(popupTitle('blob:https://app.test/0b7e-11', 'invoice.pdf', 'Work'), 'app.test — invoice.pdf (Work)');
   assert.equal(popupTitle('about:blank', '', 'Work'), 'about:blank (Work)');
   assert.equal(popupTitle('', '', 'Work'), 'about:blank (Work)');
+});
+
+test('placeTab moves a tab before another, or to the end; active tab unchanged', () => {
+  const s = openTab(three(), t(4), { activate: false });
+  assert.deepEqual(ids(placeTab(s, 4, 1)!), [4, 1, 2, 3]);
+  assert.deepEqual(ids(placeTab(s, 1, 3)!), [2, 1, 3, 4]);
+  assert.deepEqual(ids(placeTab(s, 2, null)!), [1, 3, 4, 2]);
+  assert.equal(placeTab(s, 4, 1)!.activeId, 1);
+  assert.deepEqual(placeTab(s, 4, 1)!.closed, s.closed);
+  assert.deepEqual(ids(s), [1, 2, 3, 4]); // not mutated
+});
+
+test('placeTab returns null when nothing changes or a tab is unknown', () => {
+  const s = three();
+  assert.equal(placeTab(s, 1, 2), null);    // already right before 2
+  assert.equal(placeTab(s, 3, null), null); // already last
+  assert.equal(placeTab(s, 2, 2), null);    // before itself
+  assert.equal(placeTab(s, 9, 1), null);    // unknown tab
+  assert.equal(placeTab(s, 1, 9), null);    // unknown before
+});
+
+test('moveTab swaps with the neighbour above or below; null at the ends', () => {
+  const s = three();
+  assert.deepEqual(ids(moveTab(s, 2, -1)!), [2, 1, 3]);
+  assert.deepEqual(ids(moveTab(s, 2, 1)!), [1, 3, 2]);
+  assert.equal(moveTab(s, 1, -1), null);
+  assert.equal(moveTab(s, 3, 1), null);
+  assert.equal(moveTab(s, 9, 1), null);
 });
