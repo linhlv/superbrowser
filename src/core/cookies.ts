@@ -67,7 +67,30 @@ export function toCookieDetails(row: ChromeCookieRow, value: string, nowSec: num
 }
 
 export type ImportMode = 'add' | 'replace';
-export type ImportResult = { set: number; skipped: number; failed: number; total: number };
+/** `withheld`: Google cookies not copied because Chrome's Google login for the profile is device-bound. */
+export type ImportResult = { set: number; skipped: number; failed: number; withheld: number; total: number };
+
+/** google.com, google.<cc>, google.co.<cc>, google.com.<cc>, youtube.com and their subdomains. */
+const GOOGLE_HOST = /(^|\.)(google\.(com|co)(\.[a-z]{2})?|google\.[a-z]{2}|youtube\.com)$/;
+
+/** True for a host one Google sign-in sets its session on (a leading dot is ignored). */
+export function isGoogleHost(hostKey: string): boolean {
+  return GOOGLE_HOST.test(hostKey.replace(/^\./, '').toLowerCase());
+}
+
+/**
+ * True when one of Chrome's device-bound sessions (keys of `dbsc_session_tbl`, site URLs such as
+ * `https://google.com`) is for a Google site: a copy of that login can't prove the device key and gets signed out.
+ */
+export function bindsGoogle(sessionKeys: readonly string[]): boolean {
+  return sessionKeys.some((key) => {
+    try {
+      return isGoogleHost(new URL(key).hostname);
+    } catch {
+      return false;
+    }
+  });
+}
 
 /** `name|host|path`, the host without a leading dot (from `domain`, else from `url`). */
 export function cookieKey(c: { name: string; domain?: string; url?: string; path: string }): string {

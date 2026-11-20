@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import {
-  cookieKey, decryptValue, deriveKey, planImport, toCookieDetails, type ChromeCookieRow, type CookieDetails,
+  bindsGoogle, cookieKey, decryptValue, deriveKey, isGoogleHost, planImport, toCookieDetails, type ChromeCookieRow, type CookieDetails,
 } from './cookies.ts';
 
 const KEY = Buffer.from('00112233445566778899aabbccddeeff', 'hex');
@@ -97,4 +97,21 @@ test('planImport add skips cookies already there; replace takes them all', () =>
   const existing = [{ name: 'SID', domain: 'google.com', path: '/' }, { name: 'NID', domain: 'google.com', path: '/' }];
   assert.deepEqual(planImport(candidates, existing, 'add').map((x) => x.name), ['HSID']);
   assert.deepEqual(planImport(candidates, existing, 'replace'), candidates);
+});
+
+test('isGoogleHost covers Google and YouTube domains and their subdomains only', () => {
+  for (const h of ['.google.com', 'google.com', 'accounts.google.com', '.google.com.vn', 'google.co.uk', '.google.de', '.youtube.com', 'accounts.youtube.com']) {
+    assert.equal(isGoogleHost(h), true, h);
+  }
+  for (const h of ['notgoogle.com', '.google.example', 'google.com.evil.io', 'example.com', 'youtube.com.au.example', '']) {
+    assert.equal(isGoogleHost(h), false, h);
+  }
+});
+
+test('bindsGoogle is true only when a device-bound session is for a Google site', () => {
+  assert.equal(bindsGoogle(['https://claude.ai', 'https://google.com']), true);
+  assert.equal(bindsGoogle(['https://accounts.google.com']), true);
+  assert.equal(bindsGoogle(['https://claude.ai']), false);
+  assert.equal(bindsGoogle([]), false);
+  assert.equal(bindsGoogle(['not a url']), false);
 });
