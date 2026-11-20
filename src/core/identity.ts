@@ -36,6 +36,26 @@ export function withChromeBrand(brands: readonly Brand[], version: string, seed:
   return slots;
 }
 
+const GREASE_CHARS = [' ', '(', ':', '-', '.', '/', ')', ';', '=', '?', '_'];
+const GREASE_VERSIONS = ['8', '99', '24'];
+
+/** Chromium's GREASE brand for a major version (`GetGreasedUserAgentBrandVersion`, seed = the major). */
+export function greaseBrand(major: string): Brand {
+  const seed = Number(major);
+  const c = (i: number) => GREASE_CHARS[i % GREASE_CHARS.length]!;
+  return { brand: `Not${c(seed)}A${c(seed + 1)}Brand`, version: GREASE_VERSIONS[seed % GREASE_VERSIONS.length]! };
+}
+
+/**
+ * The brand list Chrome of `major` sends, from the version alone: `version` is the major (`Sec-CH-UA`) or the full
+ * version (`Sec-CH-UA-Full-Version-List`, where GREASE gets `.0.0.0`). Same order as `withChromeBrand`.
+ */
+export function chromeBrands(major: string, version: string): Brand[] {
+  const grease = greaseBrand(major);
+  if (version.includes('.')) grease.version += '.0.0.0';
+  return withChromeBrand([grease, { brand: 'Chromium', version }], version, Number(major));
+}
+
 const ITEM = /\s*"((?:[^"\\]|\\.)*)"\s*;\s*v\s*=\s*"((?:[^"\\]|\\.)*)"\s*(,|$)/y;
 const unescape = (s: string) => s.replace(/\\(.)/g, '$1');
 const escape = (s: string) => s.replace(/[\\"]/g, '\\$&');

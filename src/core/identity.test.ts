@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { chromeMajor, formatBrands, parseBrands, rewriteClientHints, userAgent, withChromeBrand, type Brand } from './identity.ts';
+import { chromeBrands, chromeMajor, formatBrands, greaseBrand, parseBrands, rewriteClientHints, userAgent, withChromeBrand, type Brand } from './identity.ts';
 
 test('chromeMajor', () => assert.equal(chromeMajor('156.0.8078.100'), '156'));
 test('userAgent', () => assert.equal(userAgent('156'),
@@ -67,4 +67,15 @@ test('rewriteClientHints leaves requests without brand hints alone and never dro
   assert.deepEqual(rewriteClientHints({ Accept: '*/*' }, '156.0.8078.100'), { Accept: '*/*' });
   assert.deepEqual(rewriteClientHints({ 'sec-ch-ua': 'garbage' }, '156.0.8078.100'),
     { 'sec-ch-ua': 'garbage, "Google Chrome";v="156"' });
+});
+
+test('greaseBrand follows Chromium\'s rule for the major version', () => {
+  assert.deepEqual(greaseBrand('156'), { brand: 'Not:A-Brand', version: '8' });
+  assert.deepEqual(greaseBrand('158'), { brand: 'Not.A/Brand', version: '24' });
+});
+
+test('chromeBrands is the list Chrome of that version sends', () => {
+  assert.equal(formatBrands(chromeBrands('156', '156')), '"Not:A-Brand";v="8", "Chromium";v="156", "Google Chrome";v="156"');
+  assert.equal(formatBrands(chromeBrands('158', '158.0.8127.36')),
+    '"Chromium";v="158.0.8127.36", "Not.A/Brand";v="24.0.0.0", "Google Chrome";v="158.0.8127.36"');
 });
