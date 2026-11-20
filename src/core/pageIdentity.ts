@@ -1,7 +1,10 @@
 import type { Brand } from './identity.ts';
 
-/** What `presentAsChrome` needs; the frame preload computes it. `brands` empty: leave `userAgentData` alone. */
-export type PageIdentity = { brands: Brand[]; chromeBrand: string; fullVersion: string; passkeyMessage: string };
+/**
+ * What `presentAsChrome` needs; the frame preload computes it. `brands` empty: leave `userAgentData` alone.
+ * `languages`: the Accept-Language list (`acceptLanguages`), which `navigator.languages` must match.
+ */
+export type PageIdentity = { brands: Brand[]; chromeBrand: string; fullVersion: string; passkeyMessage: string; languages: string[] };
 
 /**
  * Runs in every page's own world before its scripts (the frame preload passes it to `executeInMainWorld`, which
@@ -14,6 +17,7 @@ export type PageIdentity = { brands: Brand[]; chromeBrand: string; fullVersion: 
  *   `getHighEntropyValues` (`brands`, `fullVersionList` with `chromeBrand` at `fullVersion`). Originals run first,
  *   so a wrong receiver still throws.
  * - `window.chrome` gets Chrome's `app`, `csi` and `loadTimes` (Electron leaves it empty).
+ * - `navigator.languages` is the Accept-Language list (Electron's keeps only the system languages).
  * - Every replaced function (and `Function.prototype.toString` itself) reads `function <name>() { [native code] }`
  *   and keeps the original's arity.
  */
@@ -111,6 +115,22 @@ export function presentAsChrome(o: PageIdentity): void {
       }.toJSON as Fn;
       replace(proto, 'toJSON', disguise(wrapped, 'toJSON', toJSON.length));
     }
+  }
+
+  // navigator.languages matches the Accept-Language header.
+  const NavigatorCtor = g['Navigator'] as { prototype: object } | undefined;
+  const languagesGetter = NavigatorCtor && Object.getOwnPropertyDescriptor(NavigatorCtor.prototype, 'languages')?.get;
+  if (NavigatorCtor !== undefined && typeof languagesGetter === 'function' && o.languages.length > 0) {
+    const languages = Object.freeze([...o.languages]);
+    const get = Object.getOwnPropertyDescriptor({
+      get languages() {
+        Reflect.apply(languagesGetter, this, []);
+        return languages;
+      },
+    }, 'languages')!.get as Fn;
+    Object.defineProperty(NavigatorCtor.prototype, 'languages', {
+      ...Object.getOwnPropertyDescriptor(NavigatorCtor.prototype, 'languages'), get: disguise(get, 'get languages', 0),
+    });
   }
 
   // window.chrome like Chrome's (only what is missing).

@@ -23,9 +23,11 @@ const g = globalThis as Record<string, unknown>;
 g['CredentialsContainer'] = CredentialsContainer;
 g['NavigatorUAData'] = NavigatorUAData;
 g['chrome'] = {};
+class Navigator { get languages() { return ['en-US']; } }
+g['Navigator'] = Navigator;
 function unrelated() { return 42; }
 
-presentAsChrome({ brands: BRANDS, chromeBrand: 'Google Chrome', fullVersion: '156.0.8078.100', passkeyMessage: 'no passkeys' });
+presentAsChrome({ brands: BRANDS, chromeBrand: 'Google Chrome', fullVersion: '156.0.8078.100', passkeyMessage: 'no passkeys', languages: ['en-US', 'en'] });
 
 const fnText = (f: unknown) => Function.prototype.toString.call(f);
 
@@ -79,4 +81,12 @@ test('window.chrome gets app, csi and loadTimes like Chrome\'s', () => {
   assert.deepEqual(Object.keys(csi), ['startE', 'onloadT', 'pageT', 'tran']);
   assert.equal(fnText(chrome['loadTimes']), 'function loadTimes() { [native code] }');
   assert.equal(fnText(app['getDetails']), 'function getDetails() { [native code] }');
+});
+
+test('navigator.languages matches the Accept-Language list', () => {
+  const nav = new Navigator();
+  assert.deepEqual(nav.languages, ['en-US', 'en']);
+  assert.equal(nav.languages, nav.languages, 'the same frozen array each time, like Chrome');
+  assert.ok(Object.isFrozen(nav.languages));
+  assert.equal(fnText(Object.getOwnPropertyDescriptor(Navigator.prototype, 'languages')!.get), 'function get languages() { [native code] }');
 });
