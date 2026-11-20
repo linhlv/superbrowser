@@ -22,8 +22,14 @@ function encrypt(value: string, hostKey: string, prefix = 'v10'): string {
 
 type Row = { host: string; name: string; value?: string; ev?: string; expires?: number; partition?: string; secure?: number };
 
-/** Chrome's `cookies` table (DB version 24, or `metaVersion` in its meta table) with the given rows. */
-function makeChromeDir(rows: Row[], metaVersion = '24'): string {
+/** Device-bound session keys for `Profile 1/Device Bound Sessions`, or 'corrupt' for a file that isn't SQLite. */
+type Dbsc = string[] | 'corrupt';
+
+/**
+ * Chrome's `cookies` table (DB version 24, or `metaVersion` in its meta table) with the given rows, and, when `dbsc`
+ * is given, its `Device Bound Sessions` DB.
+ */
+function makeChromeDir(rows: Row[], metaVersion = '24', dbsc?: Dbsc): string {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'sb-importer-test-'));
   fs.mkdirSync(path.join(root, 'Profile 1'));
   const sq = (s: string) => `'${s.replaceAll("'", "''")}'`;
@@ -41,6 +47,12 @@ function makeChromeDir(rows: Row[], metaVersion = '24'): string {
       last_update_utc INTEGER NOT NULL, source_type INTEGER NOT NULL, has_cross_site_ancestor INTEGER NOT NULL);
     ${inserts}`;
   execFileSync('sqlite3', [path.join(root, 'Profile 1', 'Cookies')], { input: sql });
+  const dbscFile = path.join(root, 'Profile 1', 'Device Bound Sessions');
+  if (dbsc === 'corrupt') fs.writeFileSync(dbscFile, 'not a database');
+  else if (dbsc) {
+    execFileSync('sqlite3', [dbscFile], { input: `CREATE TABLE dbsc_session_tbl (key TEXT, proto BLOB, PRIMARY KEY(key));
+      ${dbsc.map((k) => `INSERT INTO dbsc_session_tbl VALUES (${sq(k)}, X'00');`).join('\n')}` });
+  }
   return root;
 }
 
@@ -56,8 +68,8 @@ class FakeJar implements CookieJar {
   async flushStore(): Promise<void> { this.flushes++; }
 }
 
-function setup(rows: Row[], readPassword: () => Promise<string> = async () => PASSWORD, metaVersion?: string) {
-  const chromeDir = makeChromeDir(rows, metaVersion);
+function setup(rows: Row[], readPassword: () => Promise<string> = async () => PASSWORD, metaVersion?: string, dbsc?: Dbsc) {
+  const chromeDir = makeChromeDir(rows, metaVersion, dbsc);
   const jar = new FakeJar();
   const jarDirs: string[] = [];
   const logs: string[] = [];
@@ -67,7 +79,7 @@ function setup(rows: Row[], readPassword: () => Promise<string> = async () => PA
   return { chromeDir, jar, jarDirs, logs, importer };
 }
 
-const tempCopies = () => fs.readdirSync(os.tmpdir()).filter((n) => n.startsWith('superbrowser-cookies-')).sort();
+const tempCopies = () => fs.readdirSync(os.tmpdir()).filter((n) => /^superbrowser-(cookies|dbsc)-/.test(n)).sort();
 
 const ROWS: Row[] = [
   { host: '.google.com', name: 'SID', ev: encrypt('sid-value', '.google.com') },
@@ -85,7 +97,7 @@ test('importLogins decrypts, maps and sets new cookies, counting skips and failu
   jar.existing = [{ name: 'NID', domain: '.google.com', path: '/' }];
   const before = tempCopies();
   const result = await importer.importLogins('Profile 1', 'add');
-  assert.deepEqual(result, { set: 3, skipped: 3, failed: 2, total: 8 });
+  assert.deepEqual(result, { set: 3, skipped: 3, failed: 2, withheld: 0, total: 8 });
   assert.deepEqual(jarDirs, ['Profile 1']);
   assert.deepEqual(jar.setCalls.map((c) => [c.name, c.value, c.domain, c.url]), [
     ['SID', 'sid-value', '.google.com', 'https://google.com/'],
@@ -104,7 +116,7 @@ test('replace mode sets cookies the session already has', async () => {
   const { chromeDir, jar, importer } = setup(ROWS);
   jar.existing = [{ name: 'NID', domain: '.google.com', path: '/' }];
   const result = await importer.importLogins('Profile 1', 'replace');
-  assert.deepEqual(result, { set: 4, skipped: 2, failed: 2, total: 8 });
+  assert.deepEqual(result, { set: 4, skipped: 2, failed: 2, withheld: 0, total: 8 });
   assert.ok(jar.setCalls.some((c) => c.name === 'NID' && c.value === 'nid-value'));
   fs.rmSync(chromeDir, { recursive: true });
 });
@@ -138,14 +150,39 @@ test('a profile without a Cookies file fails with a readable message and touches
 
 test('an empty cookies table imports nothing', async () => {
   const { chromeDir, jar, importer } = setup([]);
-  assert.deepEqual(await importer.importLogins('Profile 1', 'add'), { set: 0, skipped: 0, failed: 0, total: 0 });
+  assert.deepEqual(await importer.importLogins('Profile 1', 'add'), { set: 0, skipped: 0, failed: 0, withheld: 0, total: 0 });
   assert.equal(jar.flushes, 1);
   fs.rmSync(chromeDir, { recursive: true });
 });
 
 test('the host hash is stripped whatever the meta version says (even none)', async () => {
   const { chromeDir, jar, importer } = setup([{ host: '.google.com', name: 'SID', ev: encrypt('sid-value', '.google.com') }], undefined, '');
-  assert.deepEqual(await importer.importLogins('Profile 1', 'add'), { set: 1, skipped: 0, failed: 0, total: 1 });
+  assert.deepEqual(await importer.importLogins('Profile 1', 'add'), { set: 1, skipped: 0, failed: 0, withheld: 0, total: 1 });
   assert.equal(jar.setCalls[0]?.value, 'sid-value');
+  fs.rmSync(chromeDir, { recursive: true });
+});
+
+test('a device-bound Google login is withheld in add and replace modes', async () => {
+  for (const mode of ['add', 'replace'] as const) {
+    const { chromeDir, jar, importer } = setup(ROWS, undefined, undefined, ['https://google.com']);
+    const before = tempCopies();
+    const result = await importer.importLogins('Profile 1', mode);
+    assert.deepEqual(result, { set: 1, skipped: 0, failed: 0, withheld: 7, total: 8 });
+    assert.deepEqual(jar.setCalls.map((c) => c.name), ['PLAIN']);
+    assert.deepEqual(tempCopies(), before, 'the temporary copies are removed');
+    fs.rmSync(chromeDir, { recursive: true });
+  }
+});
+
+test('a device-bound session for another site keeps Google', async () => {
+  const { chromeDir, importer } = setup(ROWS, undefined, undefined, ['https://claude.ai']);
+  assert.equal((await importer.importLogins('Profile 1', 'add')).withheld, 0);
+  fs.rmSync(chromeDir, { recursive: true });
+});
+
+test('an unreadable Device Bound Sessions file withholds Google and logs it', async () => {
+  const { chromeDir, logs, importer } = setup(ROWS, undefined, undefined, 'corrupt');
+  assert.equal((await importer.importLogins('Profile 1', 'add')).withheld, 7);
+  assert.ok(logs.some((l) => /Device Bound Sessions/.test(l)), logs.join('\n'));
   fs.rmSync(chromeDir, { recursive: true });
 });

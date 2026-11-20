@@ -5,7 +5,7 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import type { Cookies } from 'electron';
 import {
-  decryptValue, deriveKey, planImport, toCookieDetails,
+  bindsGoogle, decryptValue, deriveKey, isGoogleHost, planImport, toCookieDetails,
   type ChromeCookieRow, type CookieDetails, type ImportMode, type ImportResult,
 } from '../core/cookies.ts';
 import { CHROME_DIR } from './chrome.ts';
@@ -71,8 +71,13 @@ export class LoginImporter {
   /** Throws an ImportError before any session is touched when the key or Chrome's cookies can't be read. */
   async importLogins(dir: string, mode: ImportMode): Promise<ImportResult> {
     const key = await this.key();
-    const rows = await this.readRows(dir);
+    const allRows = await this.readRows(dir);
     const { log, jarOf } = this.opts;
+    // A device-bound Google login can't work as a copy (it gets signed out, and may put Chrome's at risk): its rows
+    // are dropped before they are decrypted.
+    const bound = await this.googleBound(dir);
+    const rows = bound ? allRows.filter((row) => !isGoogleHost(row.host_key)) : allRows;
+    const withheld = allRows.length - rows.length;
 
     let skipped = 0, failed = 0;
     const fail = (what: string, row: { name: string }, host: string, e: unknown) => {
@@ -111,8 +116,33 @@ export class LoginImporter {
       }
     }
     await jar.flushStore();
-    log(`profile ${dir}: imported ${set} of ${rows.length} Chrome cookies (${skipped} skipped, ${failed} failed)`);
-    return { set, skipped, failed, total: rows.length };
+    log(`profile ${dir}: imported ${set} of ${allRows.length} Chrome cookies (${skipped} skipped, ${failed} failed`
+      + `${withheld > 0 ? `, ${withheld} Google withheld (device-bound)` : ''})`);
+    return { set, skipped, failed, withheld, total: allRows.length };
+  }
+
+  /**
+   * Whether Chrome's Google login for this profile is device-bound, from a temporary copy of its `Device Bound Sessions`
+   * DB. No such file: false. A file that can't be read: true (logged), so Chrome's session is never put at risk.
+   */
+  private async googleBound(dir: string): Promise<boolean> {
+    const source = path.join(this.opts.chromeDir, dir, 'Device Bound Sessions');
+    if (!fs.existsSync(source)) return false;
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'superbrowser-dbsc-'));
+    try {
+      const db = path.join(tmp, 'Device Bound Sessions');
+      for (const suffix of ['', '-wal', '-journal']) {
+        if (suffix === '' || fs.existsSync(source + suffix)) fs.copyFileSync(source + suffix, db + suffix);
+      }
+      const { stdout } = await run('sqlite3', ['-json', db, 'SELECT key FROM dbsc_session_tbl']);
+      const keys = stdout.trim() === '' ? [] : (JSON.parse(stdout) as { key: unknown }[]).map((r) => String(r.key));
+      return bindsGoogle(keys);
+    } catch (e) {
+      this.opts.log(`profile ${dir}: reading Chrome's Device Bound Sessions failed, Google not copied: ${e instanceof Error ? e.message : String(e)}`);
+      return true;
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
   }
 
   /** Reads a temporary copy of `<chromeDir>/<dir>/Cookies` (with its journal or WAL, so a running Chrome's state is consistent). */
